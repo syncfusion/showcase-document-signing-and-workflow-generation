@@ -1,0 +1,122 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app-shell__bar.e-appbar {
+  height: 60px;
+  padding: 0 24px;
+  gap: 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+  flex-shrink: 0;
+}
+
+.app-shell__icon-btn.e-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.app-shell__icon-btn.e-btn:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app-shell__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.app-shell__brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+  box-shadow: 0 6px 16px rgba(91, 75, 219, 0.28);
+}
+
+/* Primary navigation now lives in the top app bar (sidebar removed). */
+.app-shell__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-shell__nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-shell__nav-item:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app-shell__nav-item--active {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.app-shell__content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell__content > * {
+  width: 100%;
+}
+
+/* Center standard pages in a comfortable max-width column with breathing room on the
+   left and right (modern SaaS layout). Workspace screens (Prepare/Sign) stay full-bleed. */
+.app-shell__content > *:not(.workspace-page) {
+  max-width: 1280px;
+  margin-inline: auto;
+}
+
+.app-shell__content:has(.workspace-page) {
+  overflow: hidden;
+}
+
+/* On narrow screens the nav labels collapse to icons so the bar stays on one line. */
+@media (max-width: 640px) {
+  .app-shell__bar.e-appbar {
+    padding: 0 14px;
+    gap: 10px;
+  }
+  .app-shell__nav-item {
+    padding: 8px 10px;
+  }
+  .app-shell__nav-item span {
+    display: none;
+  }
+}

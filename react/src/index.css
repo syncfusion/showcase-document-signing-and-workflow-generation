@@ -1,0 +1,132 @@
+:root {
+  --color-primary: #5b4bdb;
+  --color-primary-strong: #4a3bc2;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --ink: #14213d;
+  --muted: #697386;
+  --line: #e3e8ef;
+  --success: #149570;
+  --warning: #d97706;
+  --danger: #d14343;
+  --shadow: 0 12px 36px rgba(27, 39, 65, 0.1);
+  --radius: 12px;
+
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  color-scheme: light;
+  font: 14px/1.5 var(--sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme='dark'] {
+  --color-primary: #8a7cf0;
+  --color-primary-strong: #a498f5;
+  --bg: #0b0c10;
+  --panel: #16171e;
+  --ink: #f2f3f7;
+  --muted: #8a90a6;
+  --line: #262835;
+  --success: #35c795;
+  --warning: #f0a63d;
+  --danger: #f0605e;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-primary: #8a7cf0;
+    --color-primary-strong: #a498f5;
+    --bg: #0b0c10;
+    --panel: #16171e;
+    --ink: #f2f3f7;
+    --muted: #8a90a6;
+    --line: #262835;
+    --success: #35c795;
+    --warning: #f0a63d;
+    --danger: #f0605e;
+    --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* PdfViewer paints a "Sign" placeholder badge (yellow fill, id="signIcon_<page>_<n>") on every
+   empty SignatureField — no documented prop suppresses it, so it's hidden globally here (applies
+   on Prepare/Sign/Completed alike) rather than duplicated per screen. */
+[id^='signIcon_'] {
+  display: none !important;
+}
+
+/* The native Add Signature / Add Initial dialog (.e-pv-signature-window, shared by both) always
+   renders its tabs Draw, Type, Upload in that fixed order — no documented prop reorders them.
+   Reordered visually to Type, Draw, Upload via flex `order` (the dialog's tab container is
+   display:inline-flex); this only changes layout position, not DOM order, so the widget's own
+   click handling (tied to the untouched DOM/index) still resolves to the correct panel. */
+.e-pv-signature-window .e-toolbar-items > .e-toolbar-item:nth-child(2) {
+  order: 2; /* Draw */
+}
+.e-pv-signature-window .e-toolbar-items > .e-toolbar-item:nth-child(3) {
+  order: 1; /* Type */
+}
+.e-pv-signature-window .e-toolbar-items > .e-toolbar-item:nth-child(4) {
+  order: 3; /* Upload */
+}
+
+/* ---- Signature typography fonts (typed signatures / initials) ---- */
+@font-face {
+  font-family: 'Priestacy';
+  src: url('./assets/fonts/Priestacy.otf') format('opentype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Runethia';
+  src: url('./assets/fonts/Runethia.otf') format('opentype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Rustic Roadway';
+  src: url('./assets/fonts/RusticRoadway.otf') format('opentype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Symphonie Calligraphy';
+  src: url('./assets/fonts/SymphonieCalligraphyDEMO-Regular.otf') format('opentype');
+  font-display: swap;
+}
+
+/* Hide Syncfusion's native yellow "Initial" placeholder badge on initial fields. */
+[id^="initialIcon"], [id^="signatureIcon"] { display: none !important; }
