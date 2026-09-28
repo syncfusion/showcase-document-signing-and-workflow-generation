@@ -1,0 +1,159 @@
+/* Digital-signature validation status badge (top bar + audit rail). */
+.sign-validation {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+}
+.sign-validation--valid {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+.sign-validation--unknown {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+.sign-validation--invalid {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.sign-audit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sign-audit .sign-validation {
+  align-self: flex-start;
+}
+
+.sign-checks,
+.sign-audit__list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sign-check {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.sign-check strong {
+  display: block;
+  font-weight: 700;
+}
+.sign-check__detail {
+  display: block;
+  color: var(--muted);
+}
+.sign-check__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--muted);
+}
+.sign-check--ok .sign-check__icon {
+  background: var(--success);
+}
+.sign-check--fail .sign-check__icon {
+  background: var(--warning);
+}
+
+.sign-audit__entry {
+  position: relative;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.sign-audit__entry::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+.sign-audit__action {
+  font-weight: 700;
+}
+.sign-audit__actor,
+.sign-audit__time {
+  color: var(--muted);
+}
+.sign-audit__time {
+  display: block;
+}
+.sign-audit__iso {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+.sign-audit__detail {
+  margin-top: 2px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.sign-audit__fingerprint {
+  padding: 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 10.5px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sign-audit__fingerprint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.sign-trust-note {
+  margin: -2px 0 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.sign-audit__fingerprint-match {
+  color: var(--success);
+  font-weight: 650;
+}
+.sign-audit__fingerprint-mismatch {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+/* Section heading (duplicated from the Sign screen so the Completed view can use the report). */
+.sign-audit .sign-fields__eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 750;
+  margin: 0 2px 8px;
+}

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { getCompletedSample } from '../../data/completedSamples'
 import { LayoutTemplate, FileText, FilePlus2, ArrowRight, Check } from 'lucide-react'
 import { DOCUMENTS } from '../../data/documents'
 import { TEMPLATES } from '../../data/templates'
@@ -56,7 +57,8 @@ export function Dashboard() {
         {ACTIVITY.map((row) => {
           const doc = DOCUMENTS.find((d) => d.id === row.documentId)
           if (!doc) return null
-          const interactive = row.status !== 'Completed'
+          const completedHref = row.status === 'Completed' && getCompletedSample(doc.id) ? `/completed/${doc.id}` : null
+          const interactive = row.status !== 'Completed' || !!completedHref
           const content = (
             <>
               <div className="dashboard-activity__icon">
@@ -71,7 +73,7 @@ export function Dashboard() {
             </>
           )
           return interactive ? (
-            <Link className="dashboard-activity__row dashboard-activity__row--link" to={`/prepare/${doc.id}`} key={doc.id}>
+            <Link className="dashboard-activity__row dashboard-activity__row--link" to={completedHref ?? `/prepare/${doc.id}`} key={doc.id}>
               {content}
             </Link>
           ) : (

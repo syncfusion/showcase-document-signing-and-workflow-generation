@@ -132,8 +132,9 @@
 }
 
 .completed-audit {
-  width: 280px;
+  width: 320px;
   flex: 0 0 auto;
+  overflow-y: auto;
   background: var(--panel);
   border-left: 1px solid var(--line);
   padding: 18px 16px;
@@ -213,4 +214,26 @@
   background: var(--bg);
   padding: 1px 4px;
   border-radius: 4px;
+}
+
+.completed-topbar {
+  gap: 12px;
+}
+.completed-download {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 650;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.completed-download:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

@@ -106,6 +106,21 @@ a {
   order: 3; /* Upload */
 }
 
+/* TYPE-tab font previews: +25% over the theme's 13px (measured live — tailwind3's
+   `.e-pv-font-sign { font-size: 13px }`). No documented prop sizes these previews
+   (SignatureDialogSettingsModel has only displayMode/hideSaveSignature), so CSS it is. Our
+   empty-state `.sf-type-placeholder` boxes share the .e-pv-font-sign class, so they match. */
+.e-pv-signature-window .e-pv-font-sign {
+  font-size: 28px;
+  white-space: nowrap;
+}
+/* The theme's `.e-pv-signature-text::after` is a 1.5em-tall white gradient strip that fades
+   overflowing text; at 28px it covers the name itself. Long names are shrunk to fit instead
+   (signatureTypePlaceholder.ts fitPreviews), so the fade isn't needed. */
+.e-pv-signature-window .e-pv-signature-text::after {
+  display: none;
+}
+
 /* ---- Signature typography fonts (typed signatures / initials) ---- */
 @font-face {
   font-family: 'Priestacy';

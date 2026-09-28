@@ -1,4 +1,4 @@
-import { PdfBitmap, PdfDocument } from '@syncfusion/ej2-pdf'
+import { PdfBitmap, PdfDocument, type PdfPage } from '@syncfusion/ej2-pdf'
 import { getAssetBasePath } from './basePath'
 
 const WATERMARK_PATH = '/gallary/syncfusion-essential-studio-enterprise-edition.jpg'
@@ -8,7 +8,22 @@ const WATERMARK_MARGIN_PT = 24
 
 let watermarkBytesCache: Promise<Uint8Array> | null = null
 
-function fetchWatermarkBytes(): Promise<Uint8Array> {
+/** Stamps the watermark bottom-right on one page (also used for the signing-certificate page). */
+export function drawWatermark(page: PdfPage, watermark: PdfBitmap) {
+  const height = watermark.height * (WATERMARK_WIDTH_PT / watermark.width)
+  const graphics = page.graphics
+  graphics.save()
+  graphics.setTransparency(WATERMARK_OPACITY)
+  graphics.drawImage(watermark, {
+    x: page.size.width - WATERMARK_WIDTH_PT - WATERMARK_MARGIN_PT,
+    y: page.size.height - height - WATERMARK_MARGIN_PT,
+    width: WATERMARK_WIDTH_PT,
+    height,
+  })
+  graphics.restore()
+}
+
+export function fetchWatermarkBytes(): Promise<Uint8Array> {
   if (!watermarkBytesCache) {
     const url = window.location.origin + getAssetBasePath() + WATERMARK_PATH
     watermarkBytesCache = fetch(url)
@@ -20,8 +35,8 @@ function fetchWatermarkBytes(): Promise<Uint8Array> {
 
 /**
  * Post-processes a just-signed PDF blob (from PdfViewerComponent.saveAsBlob()) with the JS PDF
- * library: stamps the Syncfusion watermark on every page. Falls back to the original blob if
- * anything here fails, so a watermarking bug can never block the actual signing flow.
+ * library: stamps the Syncfusion watermark on every page and flattens the form fields. Falls back
+ * to the original blob if anything here fails, so a watermarking bug can never block signing.
  *
  * Field border/background stripping is NOT done here — see SignDocument.tsx's handleSubmit,
  * which clears them on the *live* viewer via formDesigner.updateFormField() before saveAsBlob().
@@ -44,23 +59,12 @@ export async function finalizeSignedPdf(signedBlob: Blob): Promise<Blob> {
 
     const doc = new PdfDocument(signedBytes)
     const watermark = new PdfBitmap(watermarkBytes)
-    const scale = WATERMARK_WIDTH_PT / watermark.width
-    const watermarkHeight = watermark.height * scale
+    for (let i = 0; i < doc.pageCount; i++) drawWatermark(doc.getPage(i), watermark)
 
-    for (let i = 0; i < doc.pageCount; i++) {
-      const page = doc.getPage(i)
-      const graphics = page.graphics
-      graphics.save()
-      graphics.setTransparency(WATERMARK_OPACITY)
-      graphics.drawImage(watermark, {
-        x: page.size.width - WATERMARK_WIDTH_PT - WATERMARK_MARGIN_PT,
-        y: page.size.height - watermarkHeight - WATERMARK_MARGIN_PT,
-        width: WATERMARK_WIDTH_PT,
-        height: watermarkHeight,
-      })
-      graphics.restore()
-    }
-
+    // Flatten form fields + annotations into static page content (document-settings.md
+    // "Flattening Content"). Done here, in the same save as the watermark, because every edit
+    // must be finished before the PKI signature is applied (src/signing/secureSign.ts).
+    doc.flatten = true
     const finalBytes = doc.save()
     doc.destroy()
     // Copy into a plain ArrayBuffer — doc.save()'s Uint8Array is typed over ArrayBufferLike

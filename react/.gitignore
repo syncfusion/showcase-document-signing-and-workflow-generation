@@ -25,3 +25,6 @@ public/ej2-pdfviewer-lib
 *.njsproj
 *.sln
 *.sw?
+
+# demo PKI generator output (contains private keys)
+scripts/out/

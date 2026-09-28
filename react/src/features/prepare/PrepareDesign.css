@@ -86,49 +86,6 @@
   flex: 1;
 }
 
-.prepare-avatarstack {
-  display: flex;
-  align-items: center;
-  margin-right: 4px;
-}
-
-.prepare-avatarstack .prepare-avatar {
-  margin-left: -8px;
-  border: 2px solid var(--panel);
-}
-
-.prepare-avatarstack .prepare-avatar:first-child {
-  margin-left: 0;
-}
-
-.prepare-avatar--add {
-  border: 2px dashed var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--panel));
-  color: var(--color-primary);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.prepare-avatar--add:hover {
-  background: color-mix(in srgb, var(--color-primary) 20%, var(--panel));
-}
-
-.prepare-icon-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.prepare-icon-btn:hover {
-  color: var(--ink);
-}
-
 .prepare-btn {
   height: 32px;
   padding: 0 13px;
@@ -644,6 +601,96 @@
   cursor: pointer;
 }
 
+/* Date picker (inspector) — the Syncfusion input group fills the row. */
+.prepare-date-row .e-input-group.prepare-datepicker,
+.prepare-date-row .prepare-datepicker {
+  width: 100%;
+}
+.prepare-inspector__section > select.prepare-input {
+  margin-bottom: 14px;
+}
+
+/* Text formatting (inspector) */
+.prepare-format {
+  margin-bottom: 14px;
+}
+.prepare-format__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.prepare-inspector__section .prepare-format .prepare-input {
+  margin-bottom: 0;
+}
+/* Scoped under the section so they beat `.prepare-inspector__section .prepare-input { width:100% }`. */
+.prepare-inspector__section .prepare-format__family {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.prepare-inspector__section .prepare-format__size {
+  flex: 0 0 64px;
+  width: 64px;
+}
+.prepare-seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.prepare-seg__btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.prepare-seg__btn:last-child {
+  border-right: none;
+}
+.prepare-seg__btn:hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+.prepare-seg__btn.is-on {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--panel));
+}
+.prepare-format__color {
+  width: 30px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.prepare-pos-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.prepare-pos {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.prepare-inspector__section .prepare-pos .prepare-input {
+  margin-bottom: 0;
+  min-width: 0;
+}
 
 /* Draft-time field editor popup (date / text) */
 .field-editor {

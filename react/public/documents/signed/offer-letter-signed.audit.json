@@ -1,0 +1,39 @@
+{
+  "documentName": "Employment Offer Letter",
+  "signerName": "Alex Norman",
+  "signedAt": "2026-09-28T11:02:33.724Z",
+  "sha256": "8c49aa05f7d7729592d238e6662e95f823a4bd20ac2d3a1969928a8722b8062b",
+  "entries": [
+    {
+      "at": "2026-09-28T11:02:22.241Z",
+      "actor": "Sender",
+      "action": "Prepared and sent for signing",
+      "detail": "2 fields · recipients: Alex Norman, Maya Kapoor"
+    },
+    {
+      "at": "2026-09-28T11:02:22.541Z",
+      "actor": "Alex Norman",
+      "action": "Opened the document",
+      "email": "alex@northstar.example"
+    },
+    {
+      "at": "2026-09-28T11:02:33.724Z",
+      "actor": "Alex Norman",
+      "action": "Signed the document",
+      "email": "alex@northstar.example",
+      "detail": "Completed 2 of 2 required fields"
+    },
+    {
+      "at": "2026-09-28T11:02:33.820Z",
+      "actor": "SignFlow",
+      "action": "Document securely signed (PKI digital signature)",
+      "detail": "CMS / PKCS#7 · SHA-256 · certificate: CN=Alex Norman, E=alex@northstar.example, O=Northstar Technologies Ltd. (demo), C=US (issued by CN=SignFlow Demo CA, O=SignFlow Demo, OU=Demo trust anchor - not publicly trusted, C=US) · RFC 3161 timestamp 2026-09-28T11:02:33.000Z · signature locked · document SHA-256: 8c49aa05f7d7729592d238e6662e95f823a4bd20ac2d3a1969928a8722b8062b"
+    },
+    {
+      "at": "2026-09-28T11:02:33.831Z",
+      "actor": "SignFlow",
+      "action": "Signature validated — Valid",
+      "detail": "Integrity: SHA-256 digest of the signed byte range matches — unchanged since signing. Identity: Chain verified: Alex Norman → SignFlow Demo CA (demo trust anchor). Timestamp: Trusted timestamp 28/09/2026, 16:32:33 from SignFlow Demo TSA (RFC 3161; demo TSA uses this device's clock). Revocation: Not revoked — checked against SignFlow Demo CA CRL (valid until 25/09/2036). Validated against the SignFlow demo CA (demo trust settings) — not a publicly trusted (AATL) certificate."
+    }
+  ]
+}

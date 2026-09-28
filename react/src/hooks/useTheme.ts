@@ -4,7 +4,7 @@ type Theme = 'light' | 'dark'
 
 const STORAGE_KEY = 'signflow-theme'
 
-function getInitialTheme(): Theme {
+export function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored === 'light' || stored === 'dark') return stored
@@ -14,7 +14,7 @@ function getInitialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function applyTheme(theme: Theme) {
+export function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', theme)
   document.body.classList.toggle('e-dark-mode', theme === 'dark')
 }

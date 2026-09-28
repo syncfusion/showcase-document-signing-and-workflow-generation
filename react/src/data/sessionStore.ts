@@ -11,6 +11,19 @@ export interface PreparedField {
   value?: string       // default text/date the drafter set
   imageData?: string   // data URL for image fields
   isReadOnly?: boolean // e.g. Image/Label/Hyperlink — drafter-set content, not signer-editable
+  format?: TextFormat  // text/date fields: drafter-chosen typography
+  dateFormat?: string  // date fields: display pattern (e.g. MM/dd/yyyy); `value` holds the formatted text
+  dateISO?: string     // date fields: the picked date, so a format change re-formats the same date
+}
+
+// Text-field typography (documented FormFieldSettings props). fontStyle is the viewer's FontStyle
+// bit flags (Bold=1, Italic=2, Underline=4).
+export interface TextFormat {
+  fontFamily?: string
+  fontSize?: number
+  fontStyle?: number
+  alignment?: 'Left' | 'Center' | 'Right' | 'Justify'
+  color?: string
 }
 
 // In-memory session store handing a prepared document from Prepare & Design to Sign.

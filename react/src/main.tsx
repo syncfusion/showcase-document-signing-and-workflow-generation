@@ -3,6 +3,12 @@ import { registerLicense } from '@syncfusion/ej2-base'
 import '@syncfusion/ej2-tailwind3-theme/styles/tailwind3-lite.css'
 import './index.css'
 import App from './App.tsx'
+import { applyTheme, getInitialTheme } from './hooks/useTheme'
+
+// Apply the stored theme before the first render. useTheme() only runs inside AppShell, so the
+// full-bleed routes (/prepare, /sign, /completed) opened directly used to stay light — and any
+// Syncfusion popup opened there rendered without the `e-dark-mode` class.
+applyTheme(getInitialTheme())
 
 const licenseKey = import.meta.env.VITE_SYNCFUSION_LICENSE_KEY
 if (licenseKey) {

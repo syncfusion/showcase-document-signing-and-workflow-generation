@@ -15,21 +15,25 @@ import {
   PageOrganizer,
   ThumbnailView,
   Inject,
+  FontStyle,
 } from '@syncfusion/ej2-react-pdfviewer'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Eye, Trash2, MousePointerClick, Check, Plus, Loader2, LayoutGrid, UserSquare2,
+  ArrowLeft, Trash2, MousePointerClick, Check, Plus, Loader2, LayoutGrid, UserSquare2,
   PenTool, PencilLine, Type, Calendar, CalendarClock, CheckSquare, CircleDot,
   User, Mail, Briefcase, Building2, Image as ImageIcon, Tag, Link2, ChevronDown,
+  Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   type LucideIcon,
 } from 'lucide-react'
-import { CalendarComponent } from '@syncfusion/ej2-react-calendars'
+import { DatePickerComponent } from '@syncfusion/ej2-react-calendars'
+import { Internationalization } from '@syncfusion/ej2-base'
 import { getDocument } from '../../data/documents'
 import { RECIPIENTS, RECIPIENT_COLORS, type Recipient } from '../../data/recipients'
-import { savePreparedDoc, getSessionDocument, getDraftSetup, type PreparedField } from '../../data/sessionStore'
+import { savePreparedDoc, getSessionDocument, getDraftSetup, type PreparedField, type TextFormat } from '../../data/sessionStore'
 import { getAssetBasePath } from '../../basePath'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { MobileSheet } from '../../components/MobileSheet'
+import { installSignatureDialogEnhancements } from '../../components/signatureDialog'
 import './PrepareDesign.css'
 
 interface SignFlowFieldBounds { x: number; y: number; width: number; height: number }
@@ -42,7 +46,7 @@ interface SignFlowFormField {
   customData?: { recipientId?: string; semantic?: string }
 }
 
-type BaseFieldType = 'SignatureField' | 'InitialField' | 'Textbox' | 'Checkbox' | 'RadioButton' | 'DropDown'
+type BaseFieldType = 'SignatureField' | 'InitialField' | 'Textbox' | 'CheckBox' | 'RadioButton' | 'DropDown'
 interface FieldDef {
   key: string
   label: string
@@ -50,6 +54,8 @@ interface FieldDef {
   semantic: string
   readOnly?: boolean
   defaultValue?: string
+  /** Overrides DEFAULT_SIZE[base] (bound units = CSS px at 100% zoom). */
+  size?: { W: number; H: number }
   Icon: LucideIcon
 }
 
@@ -76,7 +82,7 @@ const PALETTE: { group: string; items: FieldDef[] }[] = [
     items: [
       { key: 'text', label: 'Text box', base: 'Textbox', semantic: 'text', Icon: Type },
       { key: 'date', label: 'Editable date', base: 'Textbox', semantic: 'date', Icon: Calendar },
-      { key: 'checkbox', label: 'Checkbox', base: 'Checkbox', semantic: 'checkbox', Icon: CheckSquare },
+      { key: 'checkbox', label: 'Checkbox', base: 'CheckBox', semantic: 'checkbox', Icon: CheckSquare },
       { key: 'radio', label: 'Radio', base: 'RadioButton', semantic: 'radio', Icon: CircleDot },
       { key: 'dropdown', label: 'Dropdown', base: 'DropDown', semantic: 'dropdown', Icon: ChevronDown },
     ],
@@ -84,7 +90,7 @@ const PALETTE: { group: string; items: FieldDef[] }[] = [
   {
     group: 'Content',
     items: [
-      { key: 'image', label: 'Image', base: 'Textbox', semantic: 'image', readOnly: true, Icon: ImageIcon },
+      { key: 'image', label: 'Image', base: 'Textbox', semantic: 'image', readOnly: true, size: { W: 96, H: 96 }, Icon: ImageIcon },
       { key: 'label', label: 'Label', base: 'Textbox', semantic: 'label', readOnly: true, defaultValue: 'Label', Icon: Tag },
       { key: 'hyperlink', label: 'Hyperlink', base: 'Textbox', semantic: 'hyperlink', readOnly: true, defaultValue: 'https://', Icon: Link2 },
     ],
@@ -102,10 +108,27 @@ const DEFAULT_SIZE: Record<BaseFieldType, { W: number; H: number }> = {
   SignatureField: { W: 150, H: 44 },
   InitialField: { W: 90, H: 44 },
   Textbox: { W: 160, H: 24 },
-  Checkbox: { W: 22, H: 22 },
+  CheckBox: { W: 22, H: 22 },
   RadioButton: { W: 22, H: 22 },
   DropDown: { W: 160, H: 24 },
 }
+const sizeOf = (def: FieldDef) => def.size ?? DEFAULT_SIZE[def.base]
+
+// Placeholder shown in an Image field until the drafter adds a picture (editing affordance only —
+// a CSS background on the field element, never written into the PDF).
+const IMAGE_PLACEHOLDER = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#8a84b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg>',
+)
+
+// Text typography offered in the inspector: the SDK's own standard-PDF font list
+// (form-designer.js `fontFamilyItems`) minus the symbol fonts Symbol/ZapfDingbats.
+const TEXT_FONTS = ['Helvetica', 'Times New Roman', 'Courier']
+// Date field formats (DatePicker `format` patterns, calendars skill datepicker-date-formats).
+const DATE_FORMATS = ['MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'MMM d, yyyy', 'd MMMM yyyy']
+const intl = new Internationalization()
+const DEFAULT_FORMAT: Required<Omit<TextFormat, 'color'>> = { fontFamily: 'Helvetica', fontSize: 10, fontStyle: 0, alignment: 'Left' }
+
 function tint(hex: string, alpha: number) {
   const h = hex.replace('#', '')
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16)
@@ -161,15 +184,15 @@ export function PrepareDesign() {
   const [fields, setFields] = useState<SignFlowFormField[]>([])
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
   const [documentReady, setDocumentReady] = useState(false)
-  // Draft-time value editor popup (date / text) and image handling.
-  const [editor, setEditor] = useState<{ fieldId: string; kind: 'date' | 'text'; value: string; left: number; top: number } | null>(null)
+  // Image handling for draft-time field editing.
   const selectedFieldIdRef = useRef<string | null>(null)
-  const editorOpenRef = useRef(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const imageTargetRef = useRef<string | null>(null)
   const imageDataRef = useRef<Map<string, string>>(new Map())
   const placeholderTextRef = useRef<Map<string, string>>(new Map())
   const openEditorRef = useRef<(id: string) => void>(() => {})
+  const valueInputRef = useRef<HTMLInputElement>(null)
+  const movingRef = useRef(false)
 
   const isMobile = useIsMobile()
   const navigate = useNavigate()
@@ -190,15 +213,14 @@ export function PrepareDesign() {
     activeColorRef.current = recipients.find((r) => r.id === activeRecipientId)?.color ?? ''
   }, [recipients, activeRecipientId])
   useEffect(() => { selectedFieldIdRef.current = selectedFieldId }, [selectedFieldId])
-  useEffect(() => { editorOpenRef.current = !!editor }, [editor])
   // Delete / Backspace removes the selected field (unless typing in an input).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
       const ae = document.activeElement as HTMLElement | null
       const tag = (ae?.tagName || '').toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || ae?.isContentEditable) return
-      if (editorOpenRef.current) return
+      const inViewer = !!ae && !!document.getElementById(VIEWER_ID)?.contains(ae)
+      if (!inViewer && (tag === 'input' || tag === 'textarea' || tag === 'select' || ae?.isContentEditable)) return
       const id = selectedFieldIdRef.current
       if (id) { e.preventDefault(); try { getFd()?.deleteFormField(id, true) } catch { /* best-effort */ } }
     }
@@ -217,14 +239,14 @@ export function PrepareDesign() {
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') liveVal = (el as HTMLInputElement).value
       else { const inp = el.querySelector('input, textarea') as HTMLInputElement | null; liveVal = inp?.value ?? '' }
     }
-    const filled = !!(liveVal.trim() || entry?.value || entry?.imageData)
+    const filled = !!(liveVal.trim() || entry?.value || entry?.imageData || entry?.semantic === 'image')
     lbl.style.display = filled ? 'none' : ''
   }
   useEffect(() => {
     const t = window.setInterval(() => {
       layoutRef.current.forEach((entry, id) => {
         syncFieldName(id)
-        if (entry.imageData) {
+        if (entry.imageData || entry.semantic === 'image') {
           const el = document.getElementById(id)
           if (el && !el.style.backgroundImage) paintImage(id)
         }
@@ -288,11 +310,13 @@ export function PrepareDesign() {
     if (!fd || !documentReady) return
     pendingRef.current = def
     const n = placeCounterRef.current++
-    const size = DEFAULT_SIZE[def.base]
+    const size = sizeOf(def)
     const bounds = { X: 120 + (n % 4) * 26, Y: 300 + (n % 8) * 46, Width: size.W, Height: size.H }
     pendingBoundsRef.current = bounds
-    pendingPageRef.current = 0
-    try { fd.addFormField(def.base as never, { bounds, pageIndex: 0 } as never) } catch { /* best-effort */ }
+    // Click-to-place drops onto the page currently in view (1-based `pageNumber`).
+    const pageNumber = Math.max(1, Number(getViewer()?.currentPageNumber) || 1)
+    pendingPageRef.current = pageNumber - 1
+    try { fd.addFormField(def.base as never, { bounds, pageNumber } as never) } catch { /* best-effort */ }
     if (isMobile) setOpenSheet(null)
   }
 
@@ -327,6 +351,7 @@ export function PrepareDesign() {
         patch.backgroundColor = tint(color, def.base === 'SignatureField' || def.base === 'InitialField' ? 0.2 : 0.14)
       }
       try { getFd()?.updateFormField(args.field.id, patch as never) } catch { /* patch best-effort */ }
+      if (def.semantic === 'image') setTimeout(() => { paintImage(args.field.id); syncFieldName(args.field.id) }, 0)
       setFields((prev) =>
         prev.map((f) =>
           f.id === args.field.id ? { ...f, customData: { semantic: def.semantic, recipientId: recipId || undefined } } : f,
@@ -361,12 +386,14 @@ export function PrepareDesign() {
   }
   const restorePlaceholder = (_fieldId: string) => { /* reverted */ }
   const paintImage = (fieldId: string) => {
-    const url = imageDataRef.current.get(fieldId)
+    const real = imageDataRef.current.get(fieldId)
+    const isImageField = layoutRef.current.get(fieldId)?.semantic === 'image'
+    const url = real ?? (isImageField ? IMAGE_PLACEHOLDER : null)
     if (!url) return
     const el = document.getElementById(fieldId)
     if (el) {
       el.style.backgroundImage = `url("${url}")`
-      el.style.backgroundSize = 'contain'
+      el.style.backgroundSize = real ? 'contain' : '42%'
       el.style.backgroundRepeat = 'no-repeat'
       el.style.backgroundPosition = 'center'
       const inner = el.querySelector('input, textarea') as HTMLElement | null
@@ -381,7 +408,7 @@ export function PrepareDesign() {
   }, [isMobile])
 
   const handleFieldUnselect = useCallback((args: { field: SignFlowFormField }) => {
-    if (!args?.field?.id) return
+    if (!args?.field?.id || movingRef.current) return
     setSelectedFieldId((prev) => (prev === args.field.id ? null : prev))
   }, [])
 
@@ -412,7 +439,7 @@ export function PrepareDesign() {
     const patch: Record<string, unknown> = {
       customData: { semantic: selectedField.customData?.semantic, recipientId: recipient.id },
       borderColor: recipient.color,
-      color: recipient.color,
+      color: layoutRef.current.get(selectedField.id)?.format?.color ?? recipient.color,
     }
     getFd()?.updateFormField(selectedField.id, patch as never)
     const entry = layoutRef.current.get(selectedField.id)
@@ -454,7 +481,7 @@ export function PrepareDesign() {
     const base = entry?.base
     if (sem === 'image') return 'image'
     if (sem === 'date' || sem === 'dateSigned') return 'date'
-    if (base === 'Checkbox') return 'checkbox'
+    if (base === 'CheckBox') return 'checkbox'
     if (['text', 'title', 'company', 'name', 'email', 'label', 'hyperlink'].includes(sem || '')) return 'text'
     return null
   }
@@ -482,16 +509,16 @@ export function PrepareDesign() {
       if (!cur) clearPlaceholder(fieldId); else restorePlaceholder(fieldId)
       return
     }
-    const el = document.getElementById(fieldId)
-    const r = el?.getBoundingClientRect()
-    const entry = layoutRef.current.get(fieldId)
-    setEditor({
-      fieldId,
-      kind,
-      value: entry?.value ?? '',
-      left: Math.min(Math.max(8, (r?.left ?? 240)), window.innerWidth - 268),
-      top: Math.min((r?.bottom ?? 240) + 6, window.innerHeight - 220),
-    })
+    // Text and date values are edited inline in the inspector — select the field and focus it.
+    setSelectedFieldId(fieldId)
+    if (isMobile) setOpenSheet('inspector')
+    window.setTimeout(() => {
+      const target = kind === 'date'
+        ? document.querySelector<HTMLInputElement>('.prepare-datepicker input')
+        : valueInputRef.current
+      target?.focus()
+      target?.select()
+    }, 60)
   }
   const onImagePicked = (e: ReactChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -512,6 +539,100 @@ export function PrepareDesign() {
     reader.readAsDataURL(file)
   }
   useEffect(() => { openEditorRef.current = openFieldEditor })
+
+  // Live bounds of a field (CSS px at 100% zoom — Syncfusion's form-field bound units, NOT points).
+  const getLiveBounds = (fieldId: string) => {
+    const entry = layoutRef.current.get(fieldId)
+    const ff: any = (getViewer()?.formFieldCollections || []).find((c: any) => c.id === fieldId)
+    const b = ff?.bounds
+    if (b) {
+      return {
+        X: b.X ?? b.x ?? entry?.bounds.X ?? 0,
+        Y: b.Y ?? b.y ?? entry?.bounds.Y ?? 0,
+        Width: b.Width ?? b.width ?? entry?.bounds.Width ?? 0,
+        Height: b.Height ?? b.height ?? entry?.bounds.Height ?? 0,
+      }
+    }
+    return entry?.bounds ?? null
+  }
+  // Move the field to a new X/Y (bound units), keeping its size; mirror into layoutRef for Sign.
+  // updateFormField() with bounds (and some style props) deselects the field, which would unmount
+  // the inspector mid-edit. Suppress that unselect, apply the patches in order, then reselect the
+  // field and return focus to the control the user was using (stepper, size box, ...).
+  const updateKeepingSelection = (fieldId: string, patches: Record<string, unknown>[]) => {
+    const focused = document.activeElement as HTMLElement | null
+    movingRef.current = true
+    for (const patch of patches) {
+      try { getFd()?.updateFormField(fieldId, patch as never) } catch { /* best-effort */ }
+    }
+    setFields((prev) => prev.map((f) => (f.id === fieldId ? { ...f } : f)))
+    setTimeout(() => {
+      try { getFd()?.selectFormField(fieldId) } catch { /* best-effort */ }
+      movingRef.current = false
+      focused?.focus()
+      paintImage(fieldId)
+      syncFieldName(fieldId)
+    }, 0)
+  }
+
+  // Move the field to a new X/Y (bound units), keeping its size; mirror into layoutRef for Sign.
+  const moveField = (fieldId: string, axis: 'X' | 'Y', raw: number) => {
+    const cur = getLiveBounds(fieldId)
+    if (!cur || !Number.isFinite(raw)) return
+    const next = { ...cur, [axis]: Math.max(0, Math.round(raw)) }
+    const entry = layoutRef.current.get(fieldId)
+    if (entry) entry.bounds = next
+    updateKeepingSelection(fieldId, [{ bounds: next }])
+  }
+
+  const formatOf = (fieldId: string) => {
+    const entry = layoutRef.current.get(fieldId)
+    const recipColor = recipients.find((r) => r.id === entry?.recipientId)?.color
+    return { ...DEFAULT_FORMAT, color: recipColor ?? '#000000', ...(entry?.format ?? {}) }
+  }
+
+  // ---- Date fields: value comes from the inspector's DatePicker, written as text in the chosen
+  // format (Internationalization.formatDate, common skill). The ISO date is kept so changing the
+  // format re-formats the same date.
+  const dateOf = (fieldId: string) => {
+    const entry = layoutRef.current.get(fieldId)
+    return { format: entry?.dateFormat ?? DATE_FORMATS[0], iso: entry?.dateISO }
+  }
+  const setFieldDate = (fieldId: string, date: Date | null, format = dateOf(fieldId).format) => {
+    const entry = layoutRef.current.get(fieldId)
+    if (entry) { entry.dateFormat = format; entry.dateISO = date ? date.toISOString() : undefined }
+    setFieldValue(fieldId, date ? intl.formatDate(date, { format }) : '')
+  }
+
+  // Text typography via documented FormFieldSettings props (fontFamily, fontSize, fontStyle,
+  // alignment, color). Stored on the layout entry so the Sign hand-off recreates it.
+  const applyFormat = (fieldId: string, change: Partial<TextFormat>) => {
+    const entry = layoutRef.current.get(fieldId)
+    if (!entry) return
+    entry.format = { ...(entry.format ?? {}), ...change }
+    const patches: Record<string, unknown>[] = []
+    const patch: Record<string, unknown> = {}
+    if (change.fontFamily) patch.fontFamily = change.fontFamily
+    if (change.alignment) patch.alignment = change.alignment
+    if (change.color) patch.color = change.color
+    if (change.fontSize) {
+      patch.fontSize = change.fontSize
+      // Grow the box so a larger size isn't clipped (px at 100% zoom ~ pt x 96/72).
+      const need = Math.ceil(change.fontSize * (96 / 72) * 1.3 + 8)
+      const bounds = getLiveBounds(fieldId)
+      if (bounds && bounds.Height < need) {
+        patch.bounds = { ...bounds, Height: need }
+        entry.bounds = { ...bounds, Height: need }
+      }
+    }
+    if (change.fontStyle !== undefined) {
+      // The SDK only ADDS style flags; FontStyle.None is its one reset path. Clear, then apply.
+      patches.push({ fontStyle: FontStyle.None })
+      if (change.fontStyle) patch.fontStyle = change.fontStyle
+    }
+    if (Object.keys(patch).length) patches.push(patch)
+    updateKeepingSelection(fieldId, patches)
+  }
 
   const focusField = (fieldId: string) => getFd()?.selectFormField(fieldId)
 
@@ -555,6 +676,8 @@ export function PrepareDesign() {
           Height: b.Height ?? b.height ?? entry.bounds.Height,
         }
       }
+      // The page the SDK actually placed the field on is authoritative for the hand-off.
+      if (entry && Number.isInteger(ff?.pageIndex) && ff.pageIndex >= 0) entry.pageIndex = ff.pageIndex
     })
     const layout = Array.from(layoutRef.current.values())
     savePreparedDoc({ documentId: activeDocument.id, fields: layout, recipients, preparedAt: new Date().toISOString() })
@@ -624,7 +747,7 @@ export function PrepareDesign() {
     const r = pel?.getBoundingClientRect()
     if (!r || clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return
     pendingRef.current = def
-    const size = DEFAULT_SIZE[def.base]
+    const size = sizeOf(def)
     const info: any = getViewer()?.getPageInfo?.(loc.pageIndex)
     const uw = ((info?.width as number) || 612) * (96 / 72)
     const uh = ((info?.height as number) || 792) * (96 / 72)
@@ -633,7 +756,9 @@ export function PrepareDesign() {
     const bounds = { X, Y, Width: size.W, Height: size.H }
     pendingBoundsRef.current = bounds
     pendingPageRef.current = loc.pageIndex
-    try { getFd()?.addFormField(def.base as never, { bounds, pageIndex: loc.pageIndex } as never) } catch { /* best-effort */ }
+    // addFormField reads `pageNumber` (1-based, form-field-settings.md); without it the SDK uses
+    // whichever page is currently in view — so a drop on page 2 could land on page 1.
+    try { getFd()?.addFormField(def.base as never, { bounds, pageNumber: loc.pageIndex + 1 } as never) } catch { /* best-effort */ }
   }
 
   // Pointer-based drag (not HTML5 DnD): we render our own ghost following the cursor and drop the
@@ -644,7 +769,7 @@ export function PrepareDesign() {
     const startX = e.clientX, startY = e.clientY
     let dragging = false
     let ghost: HTMLDivElement | null = null
-    const size = DEFAULT_SIZE[def.base]
+    const size = sizeOf(def)
 
     const move = (ev: MouseEvent) => {
       if (!dragging) {
@@ -674,7 +799,11 @@ export function PrepareDesign() {
       document.body.style.cursor = ''
       if (ghost) { ghost.remove(); ghost = null }
       if (dragging) {
+        // Swallow only the click that may follow THIS mouseup (it fires in the same task). When
+        // the drop lands on the canvas no click reaches the palette button, so without the reset
+        // the flag stayed set and ate the user's next palette click.
         suppressClickRef.current = true
+        window.setTimeout(() => { suppressClickRef.current = false }, 0)
         placeFieldAtClient(def, ev.clientX, ev.clientY)
       }
     }
@@ -757,6 +886,17 @@ export function PrepareDesign() {
         resourceUrl={window.location.origin + getAssetBasePath() + '/ej2-pdfviewer-lib'}
         isFormDesignerToolbarVisible={false}
         designerMode={true}
+        // Field placement/editing is driven by SignFlow's own palette + inspector, so the viewer
+        // only needs page navigation and zoom/fit. Dropped: Open (document comes from the Create
+        // flow), undo/redo (would bypass the layoutRef hand-off the inspector maintains), search,
+        // print, download, comments and annotation/form-designer toggles. The right-click menu
+        // (cut/copy/paste/Properties — Properties is the native dialog we deliberately suppress)
+        // and the left navigation pane (thumbnails/bookmarks/organize pages) are hidden entirely;
+        // delete stays available via the inspector button and the Delete key.
+        toolbarSettings={{ toolbarItems: ['PageNavigationTool', 'MagnificationTool'] }}
+        contextMenuOption="None"
+        enableNavigationToolbar={false}
+        enableAnnotationToolbar={false}
         style={{ height: '100%', visibility: documentReady ? 'visible' : 'hidden' }}
         documentLoad={handleDocumentLoad}
         formFieldAdd={handleFieldAdd}
@@ -810,7 +950,141 @@ export function PrepareDesign() {
             <span>Required field</span>
           </label>
 
-          {editableKind(selectedField.id) && (
+          {editableKind(selectedField.id) === 'text' && (
+            <>
+              <div className="prepare-label">Value</div>
+              <input
+                ref={valueInputRef}
+                className="prepare-input"
+                value={layoutRef.current.get(selectedField.id)?.value ?? ''}
+                onChange={(e) => setFieldValue(selectedField.id, e.target.value)}
+                placeholder="Type a value"
+              />
+            </>
+          )}
+
+          {editableKind(selectedField.id) === 'date' && (() => {
+            const d = dateOf(selectedField.id)
+            const id = selectedField.id
+            return (
+              <>
+                <div className="prepare-label">Date</div>
+                <div className="prepare-format__row prepare-date-row">
+                  <DatePickerComponent
+                    key={id}
+                    cssClass="prepare-datepicker"
+                    value={d.iso ? new Date(d.iso) : undefined}
+                    format={d.format}
+                    placeholder={d.format}
+                    showClearButton
+                    change={(e: any) => setFieldDate(id, e?.value ? new Date(e.value) : null)}
+                  />
+                </div>
+                <div className="prepare-label">Date format</div>
+                <select
+                  className="prepare-input"
+                  aria-label="Date format"
+                  value={d.format}
+                  onChange={(e) => setFieldDate(id, d.iso ? new Date(d.iso) : null, e.target.value)}
+                >
+                  {DATE_FORMATS.map((f) => (
+                    <option key={f} value={f}>{f}{d.iso ? ` — ${intl.formatDate(new Date(d.iso), { format: f })}` : ''}</option>
+                  ))}
+                </select>
+              </>
+            )
+          })()}
+
+          {(editableKind(selectedField.id) === 'text' || editableKind(selectedField.id) === 'date') && (() => {
+            const fmt = formatOf(selectedField.id)
+            const id = selectedField.id
+            const styles: Array<[number, LucideIcon, string]> = [[FontStyle.Bold, Bold, 'Bold'], [FontStyle.Italic, Italic, 'Italic'], [FontStyle.Underline, Underline, 'Underline']]
+            const aligns: Array<[TextFormat['alignment'], LucideIcon, string]> = [['Left', AlignLeft, 'Align left'], ['Center', AlignCenter, 'Align center'], ['Right', AlignRight, 'Align right']]
+            return (
+              <div className="prepare-format">
+                <div className="prepare-label">Text formatting</div>
+                <div className="prepare-format__row">
+                  <select
+                    className="prepare-input prepare-format__family"
+                    aria-label="Font family"
+                    value={fmt.fontFamily}
+                    onChange={(e) => applyFormat(id, { fontFamily: e.target.value })}
+                  >
+                    {TEXT_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    className="prepare-input prepare-format__size"
+                    aria-label="Font size"
+                    min={6}
+                    max={48}
+                    step={1}
+                    value={fmt.fontSize}
+                    onChange={(e) => {
+                      const v = e.target.valueAsNumber
+                      if (Number.isFinite(v) && v >= 6 && v <= 48) applyFormat(id, { fontSize: v })
+                    }}
+                  />
+                </div>
+                <div className="prepare-format__row">
+                  <div className="prepare-seg" role="group" aria-label="Font style">
+                    {styles.map(([flag, Icon, label]) => {
+                      const on = (fmt.fontStyle & flag) !== 0
+                      return (
+                        <button key={label} type="button" className={`prepare-seg__btn${on ? ' is-on' : ''}`} aria-pressed={on} title={label} aria-label={label}
+                          onClick={() => applyFormat(id, { fontStyle: on ? fmt.fontStyle & ~flag : fmt.fontStyle | flag })}>
+                          <Icon size={14} />
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="prepare-seg" role="group" aria-label="Alignment">
+                    {aligns.map(([value, Icon, label]) => (
+                      <button key={label} type="button" className={`prepare-seg__btn${fmt.alignment === value ? ' is-on' : ''}`} aria-pressed={fmt.alignment === value} title={label} aria-label={label}
+                        onClick={() => applyFormat(id, { alignment: value })}>
+                        <Icon size={14} />
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="color"
+                    className="prepare-format__color"
+                    aria-label="Text color"
+                    title="Text color"
+                    value={fmt.color}
+                    onChange={(e) => applyFormat(id, { color: e.target.value })}
+                  />
+                </div>
+              </div>
+            )
+          })()}
+
+          {(() => {
+            const b = getLiveBounds(selectedField.id)
+            if (!b) return null
+            return (
+              <>
+                <div className="prepare-label">Position</div>
+                <div className="prepare-pos-row">
+                  {(['X', 'Y'] as const).map((axis) => (
+                    <label key={axis} className="prepare-pos">
+                      <span>{axis}</span>
+                      <input
+                        type="number"
+                        className="prepare-input"
+                        step={5}
+                        min={0}
+                        value={Math.round(b[axis])}
+                        onChange={(e) => moveField(selectedField.id, axis, e.target.valueAsNumber)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </>
+            )
+          })()}
+
+          {(editableKind(selectedField.id) === 'image' || editableKind(selectedField.id) === 'checkbox') && (
             <button
               className="prepare-btn prepare-btn--primary"
               style={{ width: '100%', marginBottom: 14 }}
@@ -818,7 +1092,7 @@ export function PrepareDesign() {
             >
               {(() => {
                 const k = editableKind(selectedField.id)
-                return k === 'image' ? 'Add image…' : k === 'date' ? 'Set date…' : k === 'checkbox' ? 'Toggle checked' : 'Set value…'
+                return k === 'image' ? 'Add image…' : 'Toggle checked'
               })()}
             </button>
           )}
@@ -887,98 +1161,12 @@ export function PrepareDesign() {
     </aside>
   )
 
-  // Default the Add Signature/Initial dialog to the TYPE tab (typed signatures use our fonts).
-  useEffect(() => {
-    let obs: MutationObserver | null = null
-    let timer: number | undefined
-    const clickType = () => {
-      const dd = document.getElementById('signflow-pdf-viewer_signature_window')
-      if (!dd || !dd.classList.contains('e-popup-open')) return
-      const items = Array.from(dd.querySelectorAll('.e-toolbar-item')) as HTMLElement[]
-      const typeItem = items.find((it) => it.querySelector('.e-tab-text')?.textContent === 'TYPE')
-      if (typeItem && !typeItem.classList.contains('e-active')) {
-        ;(typeItem.querySelector('.e-tab-wrap') as HTMLElement | null)?.click()
-      }
-    }
-    const selectType = () => {
-      const dlg = document.getElementById('signflow-pdf-viewer_signature_window') as HTMLElement | null
-      if (!dlg || !dlg.classList.contains('e-popup-open')) return
-      ;[0, 120, 300, 600].forEach((d) => window.setTimeout(clickType, d))
-    }
-    const attach = () => {
-      const dlg = document.getElementById('signflow-pdf-viewer_signature_window')
-      if (!dlg) return false
-      selectType()
-      obs = new MutationObserver(selectType)
-      obs.observe(dlg, { attributes: true, attributeFilter: ['class'] })
-      return true
-    }
-    // Workaround: the Add INITIAL dialog ignores typeSignatureFonts (uses Helvetica/Times/
-    // Courier/Symbol) even though the setting is applied — unlike Add Signature. Remap those
-    // defaults to our custom signature fonts on the preview elements (the created initial picks
-    // up the preview's font).
-    const FONT_MAP: Record<string, string> = {
-      helvetica: 'Priestacy', 'times new roman': 'Runethia', times: 'Runethia',
-      courier: 'Rustic Roadway', 'courier new': 'Rustic Roadway', symbol: 'Symphonie Calligraphy',
-    }
-    const mapFonts = () => {
-      const dlg = document.getElementById('signflow-pdf-viewer_signature_window')
-      if (!dlg || !dlg.classList.contains('e-popup-open')) return
-      dlg.querySelectorAll<HTMLElement>('*').forEach((el) => {
-        if (el.children.length) return
-        const fam = getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, '').trim().toLowerCase()
-        const target = FONT_MAP[fam]
-        if (target) el.style.setProperty('font-family', `"${target}"`, 'important')
-      })
-    }
-    const fontTimer = window.setInterval(mapFonts, 200)
-
-    if (!attach()) {
-      timer = window.setInterval(() => { if (attach() && timer) { clearInterval(timer); timer = undefined } }, 500)
-      window.setTimeout(() => { if (timer) clearInterval(timer) }, 15000)
-    }
-    return () => { if (timer) clearInterval(timer); clearInterval(fontTimer); obs?.disconnect() }
-  }, [])
+  // Add Signature / Add Initial dialog: TYPE tab by default (no slide animation), our 4 fonts,
+  // "Type here.." placeholder previews.
+  useEffect(() => installSignatureDialogEnhancements('signflow-pdf-viewer', Object.values(TYPE_SIGNATURE_FONTS)), [])
 
   return (
     <div className="workspace-page prepare-design">
-      {editor && editor.kind === 'date' && (
-        <>
-          <div className="field-editor__backdrop" onClick={() => setEditor(null)} />
-          <div className="field-editor field-editor--calendar" style={{ left: editor.left, top: editor.top }}>
-            <CalendarComponent
-              value={editor.value ? new Date(editor.value) : undefined}
-              change={(e: any) => {
-                if (!e?.value) return
-                const v = new Date(e.value).toLocaleDateString('en-US')
-                setFieldValue(editor.fieldId, v)
-                setEditor(null)
-              }}
-            />
-          </div>
-        </>
-      )}
-      {editor && editor.kind === 'text' && (
-        <div className="field-editor" style={{ left: editor.left, top: editor.top }}>
-          <div className="field-editor__label">Enter value</div>
-          <input
-            type="text"
-            autoFocus
-            value={editor.value}
-            placeholder="Type a value"
-            onChange={(e) => setEditor((ed) => (ed ? { ...ed, value: e.target.value } : ed))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { setFieldValue(editor.fieldId, editor.value); setEditor(null) }
-              if (e.key === 'Escape') setEditor(null)
-            }}
-          />
-          <div className="field-editor__hint">Shows on the document as the field&rsquo;s value.</div>
-          <div className="field-editor__row">
-            <button className="prepare-btn prepare-btn--primary" onClick={() => { setFieldValue(editor.fieldId, editor.value); setEditor(null) }}>Save</button>
-            <button className="prepare-btn" onClick={() => setEditor(null)}>Done</button>
-          </div>
-        </div>
-      )}
       <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={onImagePicked} />
       <div className="prepare-topbar">
         <Link to="/" className="prepare-back" aria-label="Back to SignFlow"><ArrowLeft size={16} /></Link>
@@ -987,17 +1175,6 @@ export function PrepareDesign() {
           <div className="prepare-title__meta">Draft &middot; autosaved</div>
         </div>
         <div className="prepare-topbar__spacer" />
-        {!isMobile && (
-          <div className="prepare-avatarstack">
-            {recipients.map((recipient) => (
-              <span key={recipient.id} className="prepare-avatar prepare-avatar--stacked" style={{ background: recipient.color }} title={`${recipient.name} · ${recipient.role}`}>{recipient.initials}</span>
-            ))}
-            <button className="prepare-avatar prepare-avatar--add" aria-label="Add recipient" onClick={() => setShowAddRecip(true)}><Plus size={13} /></button>
-          </div>
-        )}
-        {!isMobile && (
-          <button className="prepare-icon-btn" aria-label="Preview as recipient"><Eye size={16} /></button>
-        )}
         <button className="prepare-btn prepare-btn--primary" disabled={!readyToSend} onClick={sendForSigning}>Send for signing</button>
       </div>
 

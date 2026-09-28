@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import {
   PdfViewerComponent,
   Toolbar,
@@ -9,73 +9,81 @@ import {
   FormDesigner,
   Inject,
 } from '@syncfusion/ej2-react-pdfviewer'
-import { ArrowLeft, Check, FileCheck, Send, PenLine, Loader2, History } from 'lucide-react'
-import { DOCUMENTS } from '../../data/documents'
-import { RECIPIENTS } from '../../data/recipients'
+import { ArrowLeft, Download, Loader2, History } from 'lucide-react'
+import { getDocument } from '../../data/documents'
+import { getCompletedSample, type CompletedSampleAudit } from '../../data/completedSamples'
 import { getAssetBasePath } from '../../basePath'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { MobileSheet } from '../../components/MobileSheet'
+import { sha256Hex, toArrayBuffer, validateSignedPdf, type SignatureValidation } from '../../signing/secureSign'
+import { SignatureReport, ValidationBadge, localTime } from '../sign/SignatureReport'
 import './CompletedView.css'
 
-interface CompletedState {
-  documentName?: string
-  signerName?: string
-  signedAt?: string
-  blobUrl?: string
+const DEFAULT_SAMPLE = 'offer-letter'
+
+interface Loaded {
+  url: string
+  fileName: string
+  sha256: string
+  validation: SignatureValidation
+  audit: CompletedSampleAudit
 }
 
-const fallbackDocument = DOCUMENTS[0]
-const fallbackSigner = RECIPIENTS[0]
-
+/**
+ * A finished, securely-signed document from the gallery: loads the pre-signed sample PDF, validates
+ * its PKI signature live in the browser (same validator + demo trust settings as the Sign flow) and
+ * shows the audit log recorded when it was signed.
+ */
 export function CompletedView() {
-  const location = useLocation()
-  const state = (location.state ?? {}) as CompletedState
+  const { documentId = DEFAULT_SAMPLE } = useParams<{ documentId?: string }>()
+  const sample = getCompletedSample(documentId)
+  const doc = getDocument(documentId)
+  const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [documentReady, setDocumentReady] = useState(false)
   const isMobile = useIsMobile()
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  const documentName = state.documentName ?? fallbackDocument.name
-  const signerName = state.signerName ?? fallbackSigner.name
-  const signedAt = state.signedAt ?? new Date().toISOString()
-  const documentPath = state.blobUrl ?? window.location.origin + getAssetBasePath() + fallbackDocument.path
+  useEffect(() => {
+    if (!sample) { setError('This document has no signed copy yet.'); return }
+    let cancelled = false
+    let url: string | null = null
+    const base = window.location.origin + getAssetBasePath()
+    ;(async () => {
+      try {
+        const [pdfRes, auditRes] = await Promise.all([fetch(base + sample.pdfPath), fetch(base + sample.auditPath)])
+        if (!pdfRes.ok || !auditRes.ok) throw new Error('Signed sample not found')
+        const bytes = new Uint8Array(await pdfRes.arrayBuffer())
+        const audit = (await auditRes.json()) as CompletedSampleAudit
+        const [sha256, validation] = await Promise.all([sha256Hex(bytes), validateSignedPdf(bytes)])
+        if (cancelled) return
+        url = URL.createObjectURL(new Blob([toArrayBuffer(bytes)], { type: 'application/pdf' }))
+        setLoaded({ url, fileName: `${audit.documentName}.pdf`, sha256, validation, audit })
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the signed document')
+      }
+    })()
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
+  }, [sample])
 
-  const signedAtLabel = useMemo(
-    () =>
-      new Date(signedAt).toLocaleString(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }),
-    [signedAt],
-  )
+  const handleDownload = () => {
+    if (!loaded) return
+    const a = document.createElement('a')
+    a.href = loaded.url
+    a.download = loaded.fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
 
-  const timeline = [
-    { icon: Send, label: 'Sent for signature', meta: documentName },
-    { icon: PenLine, label: `Signed by ${signerName}`, meta: signedAtLabel },
-    { icon: FileCheck, label: 'Your part is complete', meta: 'Flattened via PdfViewer.saveAsBlob()' },
-  ]
-
-  const auditContent = (
-    <>
-      <div className="completed-audit__eyebrow">Audit trail</div>
-      <ol className="completed-timeline">
-        {timeline.map((item) => (
-          <li key={item.label} className="completed-timeline__item">
-            <span className="completed-timeline__dot">
-              <item.icon size={12} />
-            </span>
-            <div>
-              <div className="completed-timeline__label">{item.label}</div>
-              <div className="completed-timeline__meta">{item.meta}</div>
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      <div className="completed-note">
-        Use the viewer&apos;s own toolbar to download or print the signed copy — this is the
-        actual document produced by <code>saveAsBlob()</code> after signing, not a mock.
-      </div>
-    </>
+  const title = loaded?.audit.documentName ?? doc.name
+  const report = loaded && (
+    <SignatureReport
+      validation={loaded.validation}
+      audit={loaded.audit.entries}
+      sha256={loaded.sha256}
+      recordedSha256={loaded.audit.sha256}
+    />
   )
 
   return (
@@ -86,38 +94,47 @@ export function CompletedView() {
         </Link>
 
         <div className="completed-titleblock">
-          <div className="completed-title">{documentName}</div>
-          <div className="completed-title__meta">Signed {signedAtLabel}</div>
+          <div className="completed-title">{title}</div>
+          <div className="completed-title__meta">
+            {loaded ? <>Signed by {loaded.audit.signerName} &middot; {localTime(loaded.audit.signedAt)}</> : 'Completed'}
+          </div>
         </div>
 
         <div className="completed-topbar__spacer" />
 
-        <span className="completed-badge">
-          <Check size={13} />
-          Completed
-        </span>
+        {loaded && <ValidationBadge validation={loaded.validation} />}
+        <button className="completed-download" disabled={!loaded} onClick={handleDownload} title={loaded ? `Download ${loaded.fileName}` : undefined}>
+          <Download size={14} /> Download
+        </button>
       </div>
 
       <div className="completed-body">
         <div className="completed-canvas">
-          {!documentReady && (
+          {(!documentReady || error) && (
             <div className="completed-loading">
-              <Loader2 size={20} className="completed-loading__spinner" />
-              Preparing your signed copy&hellip;
+              {error ? error : <><Loader2 size={20} className="completed-loading__spinner" />Validating the signed copy&hellip;</>}
             </div>
           )}
-          <PdfViewerComponent
-            id="signflow-completed-viewer"
-            documentPath={documentPath}
-            resourceUrl={window.location.origin + getAssetBasePath() + '/ej2-pdfviewer-lib'}
-            style={{ height: '100%', visibility: documentReady ? 'visible' : 'hidden' }}
-            documentLoad={() => setDocumentReady(true)}
-          >
-            <Inject services={[Toolbar, Magnification, Navigation, FormFields, FormDesigner]} />
-          </PdfViewerComponent>
+          {loaded && (
+            <PdfViewerComponent
+              id="signflow-completed-viewer"
+              documentPath={loaded.url}
+              resourceUrl={window.location.origin + getAssetBasePath() + '/ej2-pdfviewer-lib'}
+              // Read-only review: page navigation + zoom only (same pruning as Sign/Prepare).
+              toolbarSettings={{ toolbarItems: ['PageNavigationTool', 'MagnificationTool'] }}
+              contextMenuOption="None"
+              enableNavigationToolbar={false}
+              enableAnnotationToolbar={false}
+              isFormDesignerToolbarVisible={false}
+              style={{ height: '100%', visibility: documentReady ? 'visible' : 'hidden' }}
+              documentLoad={() => setDocumentReady(true)}
+            >
+              <Inject services={[Toolbar, Magnification, Navigation, FormFields, FormDesigner]} />
+            </PdfViewerComponent>
+          )}
         </div>
 
-        {!isMobile && <aside className="completed-audit">{auditContent}</aside>}
+        {!isMobile && <aside className="completed-audit">{report}</aside>}
       </div>
 
       {isMobile && (
@@ -125,11 +142,11 @@ export function CompletedView() {
           <div className="completed-mobile-bar">
             <button className="completed-mobile-bar__btn" onClick={() => setSheetOpen(true)}>
               <History size={16} />
-              Audit trail
+              Validation &amp; audit log
             </button>
           </div>
-          <MobileSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Audit trail">
-            <div className="completed-audit completed-audit--sheet">{auditContent}</div>
+          <MobileSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Validation & audit log">
+            <div className="completed-audit completed-audit--sheet">{report}</div>
           </MobileSheet>
         </>
       )}

@@ -113,6 +113,21 @@
   cursor: not-allowed;
 }
 
+.sign-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sign-btn--ghost {
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.sign-error {
+  color: var(--danger);
+}
+
 .sign-body {
   flex: 1;
   display: flex;
@@ -224,4 +239,9 @@
   font-size: 11px;
   line-height: 1.5;
   color: var(--ink);
+}
+
+.sign-fields--audit {
+  width: 320px;
+  overflow-y: auto;
 }

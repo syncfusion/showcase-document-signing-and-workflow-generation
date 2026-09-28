@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { getCompletedSample } from '../../data/completedSamples'
 import { ColumnDirective, ColumnsDirective, GridComponent, Inject, Sort } from '@syncfusion/ej2-react-grids'
 import { FileText, ArrowRight, Check } from 'lucide-react'
 import { DOCUMENTS, type DocumentMeta } from '../../data/documents'
@@ -38,7 +39,14 @@ function StatusCell(row: DocumentRow) {
 function ActionsCell(row: DocumentRow) {
   const navigate = useNavigate()
   if (row.status === 'Completed') {
-    return <span className="documents-actions-cell documents-actions-cell--muted">No action needed</span>
+    return getCompletedSample(row.id) ? (
+      <button className="documents-actions-cell documents-actions-cell--link" onClick={() => navigate(`/completed/${row.id}`)}>
+        View signed copy
+        <ArrowRight size={13} />
+      </button>
+    ) : (
+      <span className="documents-actions-cell documents-actions-cell--muted">No action needed</span>
+    )
   }
   return (
     <button className="documents-actions-cell documents-actions-cell--link" onClick={() => navigate(`/prepare/${row.id}`)}>

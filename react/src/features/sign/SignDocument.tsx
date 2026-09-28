@@ -6,10 +6,11 @@ import {
   Navigation,
   FormFields,
   FormDesigner,
+  Annotation,
   Inject,
 } from '@syncfusion/ej2-react-pdfviewer'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, PenLine, Type, Loader2, ListChecks } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft, Check, PenLine, Type, Loader2, ListChecks, Download } from 'lucide-react'
 import { getDocument } from '../../data/documents'
 import { RECIPIENTS } from '../../data/recipients'
 import { getPreparedDoc, getSessionDocument } from '../../data/sessionStore'
@@ -17,6 +18,18 @@ import { getAssetBasePath } from '../../basePath'
 import { finalizeSignedPdf } from '../../exportPdf'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { MobileSheet } from '../../components/MobileSheet'
+import { installSignatureDialogEnhancements } from '../../components/signatureDialog'
+import {
+  readSignatureWithSyncfusion,
+  sealPdf,
+  sha256Hex,
+  toArrayBuffer,
+  validateSignedPdf,
+  SIGNATURE_DIGEST,
+  SIGNATURE_STANDARD,
+  type SignatureValidation,
+} from '../../signing/secureSign'
+import { SignatureReport, ValidationBadge, type AuditEntry } from './SignatureReport'
 import './SignDocument.css'
 
 interface SignFlowFieldBounds {
@@ -55,13 +68,28 @@ const SEED_FIELDS: Array<{ type: 'SignatureField' | 'Textbox'; name: string; bou
   { type: 'Textbox', name: 'printed_name_1', bounds: { X: 320, Y: 700, Width: 220, Height: 38 }, label: 'Printed name', icon: 'type' },
 ]
 
+// The finalized, PKI-signed document: signed + hashed + validated ONCE, and the same bytes back
+// the audit log, the viewer and the Download button.
+interface SealedDocument {
+  url: string
+  fileName: string
+  sha256: string
+  certificateSubject: string
+  validation: SignatureValidation
+  audit: AuditEntry[]
+}
+
+const safeFileName = (name: string) => `${name.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'document'}.pdf`
+
 export function SignDocument() {
   const viewerRef = useRef<PdfViewerComponent>(null)
   const [fields, setFields] = useState<SignFlowFormField[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [sealed, setSealed] = useState<SealedDocument | null>(null)
   const [documentReady, setDocumentReady] = useState(false)
   const seededRef = useRef(false)
-  const navigate = useNavigate()
+  const openedAtRef = useRef<string | null>(null)
   const isMobile = useIsMobile()
   const [sheetOpen, setSheetOpen] = useState(false)
   const { documentId } = useParams<{ documentId?: string }>()
@@ -109,6 +137,7 @@ export function SignDocument() {
 
   const handleDocumentLoad = useCallback(() => {
     setDocumentReady(true)
+    if (!openedAtRef.current) openedAtRef.current = new Date().toISOString()
     if (seededRef.current) return
     seededRef.current = true
     if (prepared?.fields?.length) {
@@ -118,6 +147,9 @@ export function SignDocument() {
           const opts: Record<string, unknown> = {
             name: pf.name,
             bounds: pf.bounds,
+            // 1-based page (form-field-settings.md). Without it addFormField uses the page in
+            // view at load time — page 1 — so fields placed on page 2+ all moved to page 1.
+            pageNumber: (pf.pageIndex ?? 0) + 1,
             isRequired: pf.isRequired,
             customData: { semantic: pf.semantic, recipientId: pf.recipientId },
           }
@@ -125,7 +157,23 @@ export function SignDocument() {
           // what should just display the drafter's image/text, not collect signer input.
           if (pf.isReadOnly) opts.isReadOnly = true
           if (pf.value) opts.value = pf.value // drafter-set default text / date
+          // Drafter-chosen typography (documented FormFieldSettings props).
+          const fmt = pf.format
+          if (fmt?.fontFamily) opts.fontFamily = fmt.fontFamily
+          if (fmt?.fontSize) opts.fontSize = fmt.fontSize
+          if (fmt?.alignment) opts.alignment = fmt.alignment
+          if (fmt?.color) opts.color = fmt.color
           getFd()?.addFormField(pf.base as never, opts as never)
+          // fontStyle is a bit-flag set that only updateFormField applies (addFormField stores
+          // a single style name), so set it once the field exists.
+          if (fmt?.fontStyle) {
+            const name = pf.name
+            const style = fmt.fontStyle
+            setTimeout(() => {
+              const ff = (getViewer()?.formFieldCollections || []).find((c: any) => c?.name === name)
+              if (ff) { try { getFd()?.updateFormField(ff.id, { fontStyle: style } as never) } catch { /* best-effort */ } }
+            }, 300)
+          }
           // Drafter-added image: paint it onto the field element once rendered.
           if (pf.imageData) {
             const data = pf.imageData
@@ -190,81 +238,100 @@ export function SignDocument() {
     )
   })
 
+  // Submit = finalize (strip field chrome → saveAsBlob → watermark + flatten) → PKI-sign with
+  // ej2-pdf in the browser → hash + validate once → audit log. The signer stays on this screen and
+  // sees the sealed document; Download delivers exactly the bytes described in the audit log.
   const handleSubmit = async () => {
     setSubmitting(true)
-    // Safety net — chrome is already cleared right after seeding (see clearFieldChrome), but
-    // reapply in case the SDK re-painted default styling while the signer filled fields in.
-    clearFieldChrome()
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    setSubmitError(null)
+    try {
+      // Field borders/backgrounds are editing chrome — clear them on the live viewer before the
+      // save bakes each field's appearance in (see exportPdf.ts for why this can't happen later).
+      clearFieldChrome()
+      await new Promise((resolve) => setTimeout(resolve, 200))
 
-    // saveAsBlob()'s documented return type is Blob, but treat it defensively as possibly async —
-    // Promise.resolve() correctly handles either a plain Blob or a Promise<Blob>.
-    const raw = viewerRef.current?.saveAsBlob()
-    const signedBlob = await Promise.resolve(raw)
-    const blob = signedBlob ? await finalizeSignedPdf(signedBlob) : undefined
-    const blobUrl = blob ? URL.createObjectURL(blob) : undefined
-    navigate('/completed', {
-      state: {
+      // saveAsBlob()'s documented return type is Blob, but treat it defensively as possibly
+      // async — Promise.resolve() handles either a plain Blob or a Promise<Blob>.
+      const signedBlob = await Promise.resolve(viewerRef.current?.saveAsBlob())
+      if (!signedBlob) throw new Error('The viewer could not export the document.')
+      const signedAt = new Date().toISOString()
+      const finalized = await finalizeSignedPdf(signedBlob)
+      const finalBytes = new Uint8Array(await finalized.arrayBuffer())
+
+      const audit: AuditEntry[] = []
+      if (prepared?.preparedAt) {
+        audit.push({
+          at: prepared.preparedAt,
+          actor: 'Sender',
+          action: 'Prepared and sent for signing',
+          detail: `${prepared.fields.length} field${prepared.fields.length === 1 ? '' : 's'} · recipients: ${prepared.recipients.map((r) => r.name).join(', ')}`,
+        })
+      }
+      if (openedAtRef.current) {
+        audit.push({ at: openedAtRef.current, actor: signer.name, email: signer.email, action: 'Opened the document' })
+      }
+      audit.push({
+        at: signedAt,
+        actor: signer.name,
+        email: signer.email,
+        action: 'Signed the document',
+        detail: `Completed ${completedCount} of ${gateFields.length} required field${gateFields.length === 1 ? '' : 's'}`,
+      })
+
+      // The signer events above are printed on the signing-certificate page, then everything is
+      // PKI-signed, hashed and validated once; these bytes back the audit log AND the download.
+      const sealedBytes = await sealPdf(finalBytes, {
         documentName: activeDocument.name,
         signerName: signer.name,
-        signedAt: new Date().toISOString(),
-        blobUrl,
-      },
-    })
+        signerEmail: signer.email,
+        reason: `Signed "${activeDocument.name}" via SignFlow`,
+        events: audit.map(({ action, actor, email, at }) => ({ action, actor, email, at })),
+      })
+      const sealedAt = new Date().toISOString()
+      const [sha256, validation] = await Promise.all([sha256Hex(sealedBytes), validateSignedPdf(sealedBytes)])
+      const sdk = readSignatureWithSyncfusion(sealedBytes)
+      const certificateSubject = validation.subject ?? sdk.subjectName ?? 'unknown'
+
+      audit.push({
+        at: sealedAt,
+        actor: 'SignFlow',
+        action: 'Document securely signed (PKI digital signature)',
+        detail: `${SIGNATURE_STANDARD} · ${SIGNATURE_DIGEST} · certificate: ${certificateSubject}${validation.issuer ? ` (issued by ${validation.issuer})` : ''} · RFC 3161 timestamp${validation.timestampTime ? ` ${validation.timestampTime.toISOString()}` : ''} · signature locked · document SHA-256: ${sha256}`,
+      })
+      audit.push({
+        at: new Date().toISOString(),
+        actor: 'SignFlow',
+        action: `Signature validated — ${validation.statusLabel}`,
+        detail: `Integrity: ${validation.integrity.detail}. Identity: ${validation.identity.detail}. Timestamp: ${validation.timestamp.detail}. Revocation: ${validation.revocation.detail}.${validation.trustNote ? ` ${validation.trustNote}` : ''}`,
+      })
+
+      const url = URL.createObjectURL(new Blob([toArrayBuffer(sealedBytes)], { type: 'application/pdf' }))
+      setSealed({ url, fileName: safeFileName(activeDocument.name), sha256, certificateSubject, validation, audit })
+      // Show the sealed document itself (flattened fields, watermark, visible signature block).
+      getViewer()?.load(url, null)
+    } catch (err) {
+      console.error('Secure signing failed', err)
+      setSubmitError(err instanceof Error ? err.message : 'Signing failed')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  // Default the Add Signature/Initial dialog to the TYPE tab (typed signatures use our fonts).
-  useEffect(() => {
-    let obs: MutationObserver | null = null
-    let timer: number | undefined
-    const clickType = () => {
-      const dd = document.getElementById('signflow-sign-viewer_signature_window')
-      if (!dd || !dd.classList.contains('e-popup-open')) return
-      const items = Array.from(dd.querySelectorAll('.e-toolbar-item')) as HTMLElement[]
-      const typeItem = items.find((it) => it.querySelector('.e-tab-text')?.textContent === 'TYPE')
-      if (typeItem && !typeItem.classList.contains('e-active')) {
-        ;(typeItem.querySelector('.e-tab-wrap') as HTMLElement | null)?.click()
-      }
-    }
-    const selectType = () => {
-      const dlg = document.getElementById('signflow-sign-viewer_signature_window') as HTMLElement | null
-      if (!dlg || !dlg.classList.contains('e-popup-open')) return
-      ;[0, 120, 300, 600].forEach((d) => window.setTimeout(clickType, d))
-    }
-    const attach = () => {
-      const dlg = document.getElementById('signflow-sign-viewer_signature_window')
-      if (!dlg) return false
-      selectType()
-      obs = new MutationObserver(selectType)
-      obs.observe(dlg, { attributes: true, attributeFilter: ['class'] })
-      return true
-    }
-    // Workaround: the Add INITIAL dialog ignores typeSignatureFonts (uses Helvetica/Times/
-    // Courier/Symbol) even though the setting is applied — unlike Add Signature. Remap those
-    // defaults to our custom signature fonts on the preview elements (the created initial picks
-    // up the preview's font).
-    const FONT_MAP: Record<string, string> = {
-      helvetica: 'Priestacy', 'times new roman': 'Runethia', times: 'Runethia',
-      courier: 'Rustic Roadway', 'courier new': 'Rustic Roadway', symbol: 'Symphonie Calligraphy',
-    }
-    const mapFonts = () => {
-      const dlg = document.getElementById('signflow-sign-viewer_signature_window')
-      if (!dlg || !dlg.classList.contains('e-popup-open')) return
-      dlg.querySelectorAll<HTMLElement>('*').forEach((el) => {
-        if (el.children.length) return
-        const fam = getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, '').trim().toLowerCase()
-        const target = FONT_MAP[fam]
-        if (target) el.style.setProperty('font-family', `"${target}"`, 'important')
-      })
-    }
-    const fontTimer = window.setInterval(mapFonts, 200)
+  const handleDownload = () => {
+    if (!sealed) return
+    const a = document.createElement('a')
+    a.href = sealed.url
+    a.download = sealed.fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
 
-    if (!attach()) {
-      timer = window.setInterval(() => { if (attach() && timer) { clearInterval(timer); timer = undefined } }, 500)
-      window.setTimeout(() => { if (timer) clearInterval(timer) }, 15000)
-    }
-    return () => { if (timer) clearInterval(timer); clearInterval(fontTimer); obs?.disconnect() }
-  }, [])
+  useEffect(() => () => { if (sealed) URL.revokeObjectURL(sealed.url) }, [sealed])
+
+  // Add Signature / Add Initial dialog: TYPE tab by default (no slide animation), our 4 fonts,
+  // "Type here.." placeholder previews, and re-signing an already-signed field.
+  useEffect(() => installSignatureDialogEnhancements('signflow-sign-viewer', Object.values(TYPE_SIGNATURE_FONTS), { allowResign: true }), [])
 
   return (
     <div className="workspace-page sign-document">
@@ -276,22 +343,36 @@ export function SignDocument() {
         <div className="sign-titleblock">
           <div className="sign-title">{activeDocument.name}</div>
           <div className="sign-title__meta">
-            Waiting for your signature &middot; {signer.name}
+            {sealed ? <>Signed &amp; digitally sealed &middot; {signer.name}</> : <>Waiting for your signature &middot; {signer.name}</>}
           </div>
         </div>
 
         <div className="sign-topbar__spacer" />
 
-        <span className="sign-progress">
-          {completedCount} of {gateFields.length} fields completed
-        </span>
+        {sealed ? (
+          <ValidationBadge validation={sealed.validation} />
+        ) : (
+          <span className="sign-progress">
+            {submitError ? <span className="sign-error">{submitError}</span> : <>{completedCount} of {gateFields.length} fields completed</>}
+          </span>
+        )}
 
+        {!sealed && (
+          <button
+            className="sign-btn sign-btn--primary"
+            disabled={!allComplete || submitting}
+            onClick={handleSubmit}
+          >
+            {submitting ? 'Signing securely…' : 'Submit'}
+          </button>
+        )}
         <button
-          className="sign-btn sign-btn--primary"
-          disabled={!allComplete || submitting}
-          onClick={handleSubmit}
+          className={`sign-btn${sealed ? '' : ' sign-btn--ghost'}`}
+          disabled={!sealed}
+          onClick={handleDownload}
+          title={sealed ? `Download ${sealed.fileName}` : 'Available after you submit'}
         >
-          {submitting ? 'Submitting…' : 'Submit'}
+          <Download size={14} /> Download
         </button>
       </div>
 
@@ -309,6 +390,18 @@ export function SignDocument() {
             documentPath={/^(blob:|https?:)/.test(activeDocument.path) ? activeDocument.path : window.location.origin + getAssetBasePath() + activeDocument.path}
             resourceUrl={window.location.origin + getAssetBasePath() + '/ej2-pdfviewer-lib'}
             isFormDesignerToolbarVisible={false}
+            // Signer needs to read, move between pages and zoom — nothing else. The document
+            // comes from the flow (no Open), Download is the top-bar button that delivers the
+            // sealed PDF (the native one would export the unsigned working copy), and the
+            // right-click menu (cut/copy/paste/delete on fields) and the left navigation pane
+            // (thumbnails/bookmarks) have no use case here.
+            toolbarSettings={{ toolbarItems: ['PageNavigationTool', 'MagnificationTool'] }}
+            contextMenuOption="None"
+            enableNavigationToolbar={false}
+            // The Annotation service is injected only so clearFormFields() can remove a signature
+            // when re-signing; its toolbar has no use here (it otherwise popped in above the page
+            // after a Cancel + re-open, shifting the document down 49px).
+            enableAnnotationToolbar={false}
             style={{ height: '100%', visibility: documentReady ? 'visible' : 'hidden' }}
             documentLoad={handleDocumentLoad}
             formFieldFocusOut={refreshFields}
@@ -323,14 +416,20 @@ export function SignDocument() {
         initialFieldSettings={{ typeSignatureFonts: TYPE_SIGNATURE_FONTS } as never}
             handWrittenSignatureSettings={{ typeSignatureFonts: TYPE_SIGNATURE_FONTS }}
           >
-            <Inject services={[Toolbar, Magnification, Navigation, FormFields, FormDesigner]} />
+            <Inject services={[Toolbar, Magnification, Navigation, Annotation, FormFields, FormDesigner]} />
           </PdfViewerComponent>
         </div>
 
         {!isMobile && (
-          <aside className="sign-fields">
-            <div className="sign-fields__eyebrow">Fields to complete</div>
-            {fieldButtons}
+          <aside className={`sign-fields${sealed ? ' sign-fields--audit' : ''}`}>
+            {sealed ? (
+              <SignatureReport validation={sealed.validation} audit={sealed.audit} sha256={sealed.sha256} />
+            ) : (
+              <>
+                <div className="sign-fields__eyebrow">Fields to complete</div>
+                {fieldButtons}
+              </>
+            )}
           </aside>
         )}
       </div>
@@ -340,11 +439,11 @@ export function SignDocument() {
           <div className="sign-mobile-bar">
             <button className="sign-mobile-bar__btn" onClick={() => setSheetOpen(true)}>
               <ListChecks size={16} />
-              Fields to complete ({completedCount}/{gateFields.length})
+              {sealed ? 'Audit log' : <>Fields to complete ({completedCount}/{gateFields.length})</>}
             </button>
           </div>
-          <MobileSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Fields to complete">
-            <div className="sign-fields sign-fields--sheet">{fieldButtons}</div>
+          <MobileSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={sealed ? 'Audit log' : 'Fields to complete'}>
+            <div className="sign-fields sign-fields--sheet">{sealed ? <SignatureReport validation={sealed.validation} audit={sealed.audit} sha256={sealed.sha256} /> : fieldButtons}</div>
           </MobileSheet>
         </>
       )}

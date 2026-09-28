@@ -24,6 +24,7 @@ function App() {
         <Route path="sign" element={<SignDocument />} />
         <Route path="sign/:documentId" element={<SignDocument />} />
         <Route path="completed" element={<CompletedView />} />
+        <Route path="completed/:documentId" element={<CompletedView />} />
       </Routes>
     </BrowserRouter>
   )
