@@ -27,9 +27,9 @@ import {
 } from 'lucide-react'
 import { DatePickerComponent } from '@syncfusion/ej2-react-calendars'
 import { Internationalization } from '@syncfusion/ej2-base'
-import { getDocument } from '../../data/documents'
+import { getSample, getSampleDraft, saveSampleDraft, resolveDocument } from '../../data/samples'
 import { RECIPIENTS, RECIPIENT_COLORS, type Recipient } from '../../data/recipients'
-import { savePreparedDoc, getSessionDocument, getDraftSetup, type PreparedField, type TextFormat } from '../../data/sessionStore'
+import { savePreparedDoc, getDraftSetup, type PreparedField, type TextFormat } from '../../data/sessionStore'
 import { getAssetBasePath } from '../../basePath'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { MobileSheet } from '../../components/MobileSheet'
@@ -162,7 +162,7 @@ function AddRecipientForm({ onAdd, onCancel }: { onAdd: (n: string, e: string, r
 
 export function PrepareDesign() {
   const { documentId } = useParams<{ documentId?: string }>()
-  const activeDocument = useMemo(() => getSessionDocument(documentId) ?? getDocument(documentId), [documentId])
+  const activeDocument = useMemo(() => resolveDocument(documentId), [documentId])
   const viewerRef = useRef<PdfViewerComponent>(null)
   // The EJ2 React ref doesn't always expose the formDesigner sub-module; fall back to the live
   // ej2 instance on the DOM node so field methods work reliably.
@@ -177,7 +177,7 @@ export function PrepareDesign() {
     return (document.getElementById(VIEWER_ID) as any)?.ej2_instances?.[0] ?? null
   }
 
-  const [recipients, setRecipients] = useState<Recipient[]>(() => getDraftSetup(documentId)?.recipients ?? RECIPIENTS)
+  const [recipients, setRecipients] = useState<Recipient[]>(() => getDraftSetup(documentId)?.recipients ?? getSampleDraft(documentId)?.recipients ?? RECIPIENTS)
   const [activeRecipientId, setActiveRecipientId] = useState<string>(RECIPIENTS[0]?.id ?? '')
   const [showAddRecip, setShowAddRecip] = useState(false)
 
@@ -206,6 +206,12 @@ export function PrepareDesign() {
   const pendingBoundsRef = useRef<{ X: number; Y: number; Width: number; Height: number } | null>(null)
   const pendingPageRef = useRef(0)
   const layoutRef = useRef<Map<string, PreparedField>>(new Map())
+  // Sample drafts: fields waiting to be recreated (keyed by field name, matched in handleFieldAdd)
+  // and whether the restore has been started for the current document.
+  const restoreRef = useRef<Map<string, PreparedField>>(new Map())
+  const restoreStartedRef = useRef(false)
+  const recipientsRef = useRef<Recipient[]>(recipients)
+  useEffect(() => { recipientsRef.current = recipients }, [recipients])
   const activeRecipientRef = useRef<string>(activeRecipientId)
   const activeColorRef = useRef<string>('')
   useEffect(() => { activeRecipientRef.current = activeRecipientId }, [activeRecipientId])
@@ -301,9 +307,57 @@ export function PrepareDesign() {
     pendingRef.current = null
     placeCounterRef.current = 0
     layoutRef.current.clear()
+    restoreRef.current.clear()
+    restoreStartedRef.current = false
   }, [activeDocument.id])
 
   const handleDocumentLoad = useCallback(() => setDocumentReady(true), [])
+
+  // Sample drafts open with their saved progress: recreate the fields once the PDF has loaded.
+  // Fresh documents (Create New Document / Template, Templates gallery) use other ids and start empty.
+  useEffect(() => {
+    if (!documentReady || restoreStartedRef.current) return
+    restoreStartedRef.current = true
+    const draft = getSampleDraft(activeDocument.id)
+    const fd = getFd()
+    if (!draft?.fields.length || !fd) return
+    let maxSeq = 0
+    for (const pf of draft.fields) {
+      restoreRef.current.set(pf.name, pf)
+      const seq = Number(/(\d+)$/.exec(pf.name)?.[1])
+      if (seq > maxSeq) maxSeq = seq
+    }
+    nameSeqRef.current = Math.max(nameSeqRef.current, maxSeq)
+    for (const pf of draft.fields) {
+      const opts: Record<string, unknown> = {
+        name: pf.name,
+        bounds: pf.bounds,
+        pageNumber: (pf.pageIndex ?? 0) + 1,
+        isRequired: pf.isRequired,
+        customData: { semantic: pf.semantic, recipientId: pf.recipientId },
+      }
+      if (pf.isReadOnly) opts.isReadOnly = true
+      if (pf.value) opts.value = pf.value
+      const fmt = pf.format
+      if (fmt?.fontFamily) opts.fontFamily = fmt.fontFamily
+      if (fmt?.fontSize) opts.fontSize = fmt.fontSize
+      if (fmt?.alignment) opts.alignment = fmt.alignment
+      if (fmt?.color) opts.color = fmt.color
+      try { fd.addFormField(pf.base as never, opts as never) } catch { restoreRef.current.delete(pf.name) }
+    }
+  }, [documentReady, activeDocument.id])
+
+  // Keep edits to a sample draft for the session (sessionStorage), once its restore has finished.
+  useEffect(() => {
+    const sample = getSample(activeDocument.id)
+    if (sample?.status !== 'Draft') return
+    const t = window.setInterval(() => {
+      if (!restoreStartedRef.current || restoreRef.current.size > 0) return
+      syncLayoutFromViewer()
+      saveSampleDraft(sample.id, { fields: Array.from(layoutRef.current.values()), recipients: recipientsRef.current })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [activeDocument.id])
 
   const placeField = (def: FieldDef) => {
     const fd = getFd()
@@ -323,6 +377,29 @@ export function PrepareDesign() {
   const handleFieldAdd = useCallback((args: { field: SignFlowFormField }) => {
     if (!args?.field?.id) return
     setFields((prev) => (prev.some((f) => f.id === args.field.id) ? prev : [...prev, args.field]))
+    // A field recreated from a sample draft: keep its saved name, assignment and content.
+    const restored = restoreRef.current.get(args.field.name)
+    if (restored) {
+      restoreRef.current.delete(args.field.name)
+      layoutRef.current.set(args.field.id, { ...restored })
+      const color = recipientsRef.current.find((r) => r.id === restored.recipientId)?.color
+      if (color) {
+        const patch: Record<string, unknown> = {
+          borderColor: color,
+          backgroundColor: tint(color, restored.base === 'SignatureField' || restored.base === 'InitialField' ? 0.2 : 0.14),
+        }
+        if (!restored.format?.color) patch.color = color
+        try { getFd()?.updateFormField(args.field.id, patch as never) } catch { /* best-effort */ }
+      }
+      if (restored.format?.fontStyle) {
+        try { getFd()?.updateFormField(args.field.id, { fontStyle: restored.format.fontStyle } as never) } catch { /* best-effort */ }
+      }
+      if (restored.imageData) imageDataRef.current.set(args.field.id, restored.imageData)
+      const customData = { semantic: restored.semantic, recipientId: restored.recipientId }
+      setFields((prev) => prev.map((f) => (f.id === args.field.id ? { ...f, customData } : f)))
+      setTimeout(() => { paintImage(args.field.id); syncFieldName(args.field.id) }, 0)
+      return
+    }
     const def = pendingRef.current
     if (def) {
       const recipId = activeRecipientRef.current
@@ -427,6 +504,27 @@ export function PrepareDesign() {
       }
     }
     setTimeout(() => { paintImage(nv.id); paintPlaceholder(nv.id) }, 0)
+  }, [])
+
+  // Dragging or resizing a field on the page doesn't fire formFieldPropertiesChange, so the
+  // inspector's X/Y kept showing the drop position. The documented formFieldMove / formFieldResize
+  // events fire on mouse-up: read the field's live bounds then, mirror them into layoutRef (the
+  // Sign hand-off and the draft autosave) and re-render so the inspector shows the new position.
+  const handleFieldGeometryChange = useCallback((args: { field?: { id?: string }; currentPosition?: { X: number; Y: number; Width: number; Height: number } }) => {
+    const id = args?.field?.id
+    if (!id) return
+    setTimeout(() => {
+      const ff: any = (getViewer()?.formFieldCollections || []).find((c: any) => c.id === id)
+      const b = ff?.bounds
+      const cur = args.currentPosition
+      const next = b
+        ? { X: b.X ?? b.x, Y: b.Y ?? b.y, Width: b.Width ?? b.width, Height: b.Height ?? b.height }
+        : cur ? { X: cur.X, Y: cur.Y, Width: cur.Width, Height: cur.Height } : null
+      const entry = layoutRef.current.get(id)
+      if (entry && next) entry.bounds = next
+      if (entry && Number.isInteger(ff?.pageIndex) && ff.pageIndex >= 0) entry.pageIndex = ff.pageIndex
+      setFields((prev) => prev.map((f) => (f.id === id ? { ...f } : f)))
+    }, 0)
   }, [])
 
   const selectedField = useMemo(() => fields.find((f) => f.id === selectedFieldId) ?? null, [fields, selectedFieldId])
@@ -662,8 +760,8 @@ export function PrepareDesign() {
   ]
   const readyToSend = checklist.every((c) => c.done)
 
-  const sendForSigning = () => {
-    // Sync final positions/sizes from the live viewer (fields the user dragged or resized).
+  // Sync positions/sizes/pages from the live viewer (fields the user dragged or resized).
+  function syncLayoutFromViewer() {
     const coll: any[] = getViewer()?.formFieldCollections || []
     coll.forEach((ff) => {
       const entry = layoutRef.current.get(ff.id)
@@ -679,6 +777,10 @@ export function PrepareDesign() {
       // The page the SDK actually placed the field on is authoritative for the hand-off.
       if (entry && Number.isInteger(ff?.pageIndex) && ff.pageIndex >= 0) entry.pageIndex = ff.pageIndex
     })
+  }
+
+  const sendForSigning = () => {
+    syncLayoutFromViewer()
     const layout = Array.from(layoutRef.current.values())
     savePreparedDoc({ documentId: activeDocument.id, fields: layout, recipients, preparedAt: new Date().toISOString() })
     navigate(`/sign/${activeDocument.id}`)
@@ -904,6 +1006,8 @@ export function PrepareDesign() {
         formFieldSelect={handleFieldSelect}
         formFieldUnselect={handleFieldUnselect}
         formFieldPropertiesChange={handleFieldPropertiesChange}
+        formFieldMove={handleFieldGeometryChange as never}
+        formFieldResize={handleFieldGeometryChange as never}
         // InitialFieldSettingsModel has no typeSignatureFonts of its own; the Add Initial
         // dialog's font list comes from handWrittenSignatureSettings instead — see
         // SignDocument.tsx for the confirmed-live finding.

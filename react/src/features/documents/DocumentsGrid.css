@@ -54,7 +54,7 @@
   color: var(--muted);
 }
 
-.documents-badge--ready-to-send {
+.documents-badge--ready-to-sign {
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-primary);
 }

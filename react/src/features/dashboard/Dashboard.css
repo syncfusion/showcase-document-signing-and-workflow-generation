@@ -185,7 +185,7 @@
   color: var(--muted);
 }
 
-.dashboard-badge--ready-to-send {
+.dashboard-badge--ready-to-sign {
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-primary);
 }

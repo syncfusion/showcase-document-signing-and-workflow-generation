@@ -9,11 +9,12 @@ import {
   Annotation,
   Inject,
 } from '@syncfusion/ej2-react-pdfviewer'
+import { Internationalization } from '@syncfusion/ej2-base'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, PenLine, Type, Loader2, ListChecks, Download } from 'lucide-react'
-import { getDocument } from '../../data/documents'
 import { RECIPIENTS } from '../../data/recipients'
-import { getPreparedDoc, getSessionDocument } from '../../data/sessionStore'
+import { getPreparedDoc } from '../../data/sessionStore'
+import { getSamplePrepared, resolveDocument } from '../../data/samples'
 import { getAssetBasePath } from '../../basePath'
 import { finalizeSignedPdf } from '../../exportPdf'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -54,6 +55,9 @@ interface SignFlowFormField {
 // A field counts as "filled" differently per type: Checkbox/RadioButton don't populate `.value`
 // (FormFieldModel carries isChecked/isSelected instead, per the installed .d.ts) — text/date/
 // dropdown/signature/initial fields all use `.value`.
+const intl = new Internationalization()
+const todayIn = (format = 'MMM d, yyyy') => intl.formatDate(new Date(), { format })
+
 const isFieldFilled = (f: SignFlowFormField) =>
   Boolean(f.isChecked) || Boolean(f.isSelected) || Boolean(f.value && f.value.length > 0)
 
@@ -93,8 +97,9 @@ export function SignDocument() {
   const isMobile = useIsMobile()
   const [sheetOpen, setSheetOpen] = useState(false)
   const { documentId } = useParams<{ documentId?: string }>()
-  const prepared = useMemo(() => (documentId ? getPreparedDoc(documentId) : null), [documentId])
-  const activeDocument = useMemo(() => getSessionDocument(documentId) ?? getDocument(documentId), [documentId])
+  // A document sent from Prepare this session wins; a "Ready to sign" sample falls back to its seed.
+  const prepared = useMemo(() => (documentId ? getPreparedDoc(documentId) ?? getSamplePrepared(documentId) : null), [documentId])
+  const activeDocument = useMemo(() => resolveDocument(documentId), [documentId])
   const signer = prepared?.recipients?.[0] ?? RECIPIENTS[0]
   const getViewer = (): any => {
     const ref: any = viewerRef.current
@@ -157,6 +162,8 @@ export function SignDocument() {
           // what should just display the drafter's image/text, not collect signer input.
           if (pf.isReadOnly) opts.isReadOnly = true
           if (pf.value) opts.value = pf.value // drafter-set default text / date
+          // Date fields left empty by the drafter open with today's date (the signer can still edit it).
+          else if (pf.semantic === 'date' || pf.semantic === 'dateSigned') opts.value = todayIn(pf.dateFormat)
           // Drafter-chosen typography (documented FormFieldSettings props).
           const fmt = pf.format
           if (fmt?.fontFamily) opts.fontFamily = fmt.fontFamily

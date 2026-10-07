@@ -24,22 +24,32 @@ export function installSignatureDialogEnhancements(viewerId: string, fonts: stri
   const isOpen = (d: HTMLElement | null): d is HTMLElement => !!d && d.classList.contains('e-popup-open')
   const getViewer = (): any => (document.getElementById(viewerId) as any)?.ej2_instances?.[0] ?? null
 
-  // ---- TYPE tab by default, with no tab-switch animation --------------------------------------
-  // Syncfusion always opens the dialog on DRAW. Clicking TYPE afterwards made the Tab component
-  // slide the (intentionally white) preview panel in across the dark dialog while it faded in —
-  // the dark-mode "black→white flash". Instead, as soon as the dialog's Tab instance exists (the
-  // MutationObserver callback runs before the next paint), turn its animation off and select TYPE
-  // via the documented Tab API (`animation` + `select(index)`).
+  // ---- DRAW tab by default, with no tab-switch animation --------------------------------------
+  // The dialog opens on DRAW (the product default since 2026-10-07; it used to force TYPE). Tab
+  // switches still run with animation off: the Tab component's default slide moved the
+  // (intentionally white) preview panel across the dark dialog — the dark-mode "black→white
+  // flash". As soon as the dialog's Tab instance exists (the MutationObserver callback runs before
+  // the next paint), turn its animation off and make sure DRAW is selected via the documented Tab
+  // API (`animation` + `select(index)`). Re-signing a typed signature switches to TYPE below.
   const handledTabs = new WeakSet<Element>()
-  const selectTypeTab = () => {
+  const getTab = () => {
     const tabEl = document.getElementById(`${viewerId}Signature_tab`)
     const tab: any = (tabEl as any)?.ej2_instances?.[0]
-    if (!tabEl || !tab || handledTabs.has(tabEl)) return
-    handledTabs.add(tabEl)
-    tab.animation = NO_ANIMATION
-    const headers = Array.from(tabEl.querySelectorAll('.e-tab-text')).map((e) => e.textContent?.trim().toUpperCase())
-    const typeIndex = headers.indexOf('TYPE')
-    if (typeIndex >= 0 && tab.selectedItem !== typeIndex) tab.select(typeIndex)
+    return tabEl && tab ? { tabEl, tab } : null
+  }
+  const selectTab = (label: 'DRAW' | 'TYPE') => {
+    const t = getTab()
+    if (!t) return
+    t.tab.animation = NO_ANIMATION
+    const headers = Array.from(t.tabEl.querySelectorAll('.e-tab-text')).map((e) => e.textContent?.trim().toUpperCase())
+    const index = headers.indexOf(label)
+    if (index >= 0 && t.tab.selectedItem !== index) t.tab.select(index)
+  }
+  const selectDefaultTab = () => {
+    const t = getTab()
+    if (!t || handledTabs.has(t.tabEl)) return
+    handledTabs.add(t.tabEl)
+    selectTab('DRAW')
   }
 
   const mapFonts = (dlg: HTMLElement) => {
@@ -111,6 +121,7 @@ export function installSignatureDialogEnhancements(viewerId: string, fonts: stri
     const font: string | undefined = viewer.annotations?.find((a: any) => a?.id === `${fieldId}_content`)?.fontFamily
     const input = dlg.querySelector<HTMLInputElement>('input[id$="_e-pv-Signtext-box"]')
     if (!input || input.value) return
+    selectTab('TYPE')
     input.value = String(field.value)
     // The SDK renders its previews from the input's keyup/input handlers.
     input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -128,7 +139,7 @@ export function installSignatureDialogEnhancements(viewerId: string, fonts: stri
   const onChange = () => {
     const dlg = getDialog()
     if (!isOpen(dlg)) {
-      if (dlg) selectTypeTab() // inserted but not yet flagged open — still before first paint
+      if (dlg) selectDefaultTab() // inserted but not yet flagged open — still before first paint
       if (openDlg) resignFieldId = null // open → closed: any re-sign in progress is over
       openDlg = null
       return
@@ -138,7 +149,7 @@ export function installSignatureDialogEnhancements(viewerId: string, fonts: stri
       resignFieldId = pendingResign && performance.now() - pendingResign.at < 1500 ? pendingResign.id : null
       pendingResign = null
       openDlg = dlg
-      selectTypeTab()
+      selectDefaultTab()
       if (resignFieldId) {
         const id = resignFieldId
         window.setTimeout(() => { if (resignFieldId === id && isOpen(getDialog())) prefillTypedSignature(dlg, id) }, 50)

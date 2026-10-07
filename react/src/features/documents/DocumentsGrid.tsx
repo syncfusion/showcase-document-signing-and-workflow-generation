@@ -3,16 +3,17 @@ import { getCompletedSample } from '../../data/completedSamples'
 import { ColumnDirective, ColumnsDirective, GridComponent, Inject, Sort } from '@syncfusion/ej2-react-grids'
 import { FileText, ArrowRight, Check } from 'lucide-react'
 import { DOCUMENTS, type DocumentMeta } from '../../data/documents'
-import { ACTIVITY } from '../../data/activity'
+import { ACTIVITY, type DocumentStatus } from '../../data/activity'
+import { sampleHref } from '../../data/samples'
 import './DocumentsGrid.css'
 
 interface DocumentRow extends DocumentMeta {
-  status: string
+  status: DocumentStatus
 }
 
 const ROWS: DocumentRow[] = DOCUMENTS.map((doc) => ({
   ...doc,
-  status: ACTIVITY.find((a) => a.documentId === doc.id)?.status ?? 'Draft',
+  status: ACTIVITY.find((a) => a.documentId === doc.id)?.status ?? ('Draft' as const),
 }))
 
 function NameCell(row: DocumentRow) {
@@ -49,8 +50,8 @@ function ActionsCell(row: DocumentRow) {
     )
   }
   return (
-    <button className="documents-actions-cell documents-actions-cell--link" onClick={() => navigate(`/prepare/${row.id}`)}>
-      Open in Prepare
+    <button className="documents-actions-cell documents-actions-cell--link" onClick={() => navigate(sampleHref(row.id, row.status))}>
+      {row.status === 'Ready to sign' ? 'Sign now' : 'Continue draft'}
       <ArrowRight size={13} />
     </button>
   )

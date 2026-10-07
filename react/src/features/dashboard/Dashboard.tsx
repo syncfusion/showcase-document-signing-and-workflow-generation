@@ -5,6 +5,7 @@ import { DOCUMENTS } from '../../data/documents'
 import { TEMPLATES } from '../../data/templates'
 import { RECIPIENTS } from '../../data/recipients'
 import { ACTIVITY } from '../../data/activity'
+import { sampleHref } from '../../data/samples'
 import './Dashboard.css'
 
 const QUICK_ACTIONS = [
@@ -57,8 +58,7 @@ export function Dashboard() {
         {ACTIVITY.map((row) => {
           const doc = DOCUMENTS.find((d) => d.id === row.documentId)
           if (!doc) return null
-          const completedHref = row.status === 'Completed' && getCompletedSample(doc.id) ? `/completed/${doc.id}` : null
-          const interactive = row.status !== 'Completed' || !!completedHref
+          const interactive = row.status !== 'Completed' || !!getCompletedSample(doc.id)
           const content = (
             <>
               <div className="dashboard-activity__icon">
@@ -73,7 +73,7 @@ export function Dashboard() {
             </>
           )
           return interactive ? (
-            <Link className="dashboard-activity__row dashboard-activity__row--link" to={completedHref ?? `/prepare/${doc.id}`} key={doc.id}>
+            <Link className="dashboard-activity__row dashboard-activity__row--link" to={sampleHref(doc.id, row.status)} key={doc.id}>
               {content}
             </Link>
           ) : (
