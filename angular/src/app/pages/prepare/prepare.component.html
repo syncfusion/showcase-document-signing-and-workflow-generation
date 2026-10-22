@@ -1,0 +1,207 @@
+@if (doc(); as doc) {
+  <div class="workspace">
+    <input id="prepare-image-input" type="file" accept="image/*" hidden (change)="onImagePicked($event)" aria-label="Image for the selected field" />
+    <app-workspace-bar [title]="doc.name" meta="Draft · saved in this tab">
+      @if (!check().ready) { <span class="progress-text">{{ firstTodo() }}</span> }
+      <button ejs-button cssClass="e-primary" [disabled]="!check().ready" (click)="send()">Send for signing</button>
+    </app-workspace-bar>
+    <div class="workspace-body">
+      @if (!narrow()) { <aside class="side-panel side-panel--left" aria-label="Fields"><ng-container *ngTemplateOutlet="paletteTpl" /></aside> }
+      <div class="viewer-area prepare-canvas" [class.loading]="!documentReady()">
+        @if (!failed()) {
+          @for (key of attempts(); track key) {
+            @defer (on immediate) {
+              <app-designer-viewer #designer [documentUrl]="url()" (loaded)="onLoaded()" (loadFailed)="failed.set(true)"
+                (fieldAdd)="onFieldAdd($event)" (fieldRemove)="onFieldRemove($event)" (fieldSelect)="onFieldSelect($event)"
+                (fieldUnselect)="onFieldUnselect($event)" (fieldPropertiesChange)="onFieldPropertiesChange($event)" (fieldGeometryChange)="onFieldGeometryChange($event)" />
+            }
+          }
+        }
+        @if (!documentReady() && !failed()) { <app-loading variant="overlay" label="Loading document…" /> }
+        @if (failed()) {
+          <div class="viewer-error" role="alert">
+            <svg lucideTriangleAlert [size]="28" aria-hidden="true"></svg>
+            <p>We couldn't open {{ doc.name }}.</p>
+            <button ejs-button cssClass="e-primary" (click)="retry()">Try again</button>
+          </div>
+        }
+      </div>
+      @if (!narrow()) { <aside class="side-panel" aria-label="Field and recipients"><ng-container *ngTemplateOutlet="inspectorTpl" /></aside> }
+    </div>
+    @if (narrow()) {
+      <div class="mobile-bar">
+        <button ejs-button cssClass="e-outline app-btn" (click)="openSheet.set('palette')"><svg lucideLayoutGrid [size]="16" aria-hidden="true"></svg> Fields</button>
+        <button ejs-button cssClass="e-outline app-btn" (click)="openSheet.set('inspector')"><svg lucideSquareUser [size]="16" aria-hidden="true"></svg> {{ selected() ? 'Edit field' : 'Ledger' }}</button>
+      </div>
+      <app-mobile-sheet [open]="openSheet() === 'palette'" title="Add fields" (closed)="openSheet.set(null)"><ng-container *ngTemplateOutlet="paletteTpl" /></app-mobile-sheet>
+      <app-mobile-sheet [open]="openSheet() === 'inspector'" title="Field and recipients" (closed)="openSheet.set(null)"><ng-container *ngTemplateOutlet="inspectorTpl" /></app-mobile-sheet>
+    }
+  </div>
+
+  <ng-template #paletteTpl>
+    <div class="prepare-palette">
+      <h2 class="panel-eyebrow">Placing fields for</h2>
+      <div class="chip-row" role="group" aria-label="Placing fields for">
+        @for (r of recipients(); track r.id) {
+          <button type="button" [class]="'recip-chip' + (activeRecipientId() === r.id ? ' is-active' : '')" [attr.aria-pressed]="activeRecipientId() === r.id"
+            [style.--rc]="rc(r)" (click)="activeRecipientId.set(r.id)"><span class="avatar" aria-hidden="true">{{ r.initials }}</span>{{ r.name }}</button>
+        }
+        <button ejs-button cssClass="e-flat e-small app-btn" (click)="showAddRecip.set(!showAddRecip())" [attr.aria-expanded]="showAddRecip()"><svg lucidePlus [size]="14" aria-hidden="true"></svg> Add</button>
+      </div>
+      @if (showAddRecip()) {
+        <form class="prepare-addrecip" (submit)="$event.preventDefault(); addRecipient()">
+          <ejs-textbox placeholder="Full name" floatLabelType="Auto" [value]="newRecip.name" (input)="newRecip.name = $any($event).value ?? ''" [htmlAttributes]="{ 'aria-label': 'Full name' }"></ejs-textbox>
+          <ejs-textbox placeholder="Email address" floatLabelType="Auto" type="email" [value]="newRecip.email" (input)="newRecip.email = $any($event).value ?? ''" [htmlAttributes]="{ 'aria-label': 'Email address' }"></ejs-textbox>
+          <ejs-textbox placeholder="Role (e.g. Client)" floatLabelType="Auto" [value]="newRecip.role" (input)="newRecip.role = $any($event).value ?? ''" [htmlAttributes]="{ 'aria-label': 'Role' }"></ejs-textbox>
+          <div class="prepare-row-end">
+            <button ejs-button type="button" cssClass="e-flat" (click)="showAddRecip.set(false)">Cancel</button>
+            <button ejs-button type="submit" cssClass="e-primary">Add recipient</button>
+          </div>
+        </form>
+      }
+      <p class="field-hint">Drag a field onto the document, or choose it to drop it on the page in view.</p>
+      @for (g of palette; track g.group) {
+        <div class="palette-group">
+          <h3 class="panel-eyebrow">{{ g.group }}</h3>
+          <div class="palette-grid">
+            @for (def of g.items; track def.key) {
+              <button type="button" class="palette-item" [disabled]="!documentReady()" (mousedown)="beginDrag($event, def)" (click)="paletteClick(def)"
+                [title]="'Drag onto the document, or choose to place: ' + def.label">
+                @switch (def.key) {
+                  @case ('signature') { <svg lucidePenTool [size]="16" aria-hidden="true"></svg> }
+                  @case ('initials') { <svg lucidePencilLine [size]="16" aria-hidden="true"></svg> }
+                  @case ('name') { <svg lucideUser [size]="16" aria-hidden="true"></svg> }
+                  @case ('email') { <svg lucideMail [size]="16" aria-hidden="true"></svg> }
+                  @case ('title') { <svg lucideBriefcase [size]="16" aria-hidden="true"></svg> }
+                  @case ('company') { <svg lucideBuilding [size]="16" aria-hidden="true"></svg> }
+                  @case ('dateSigned') { <svg lucideCalendarClock [size]="16" aria-hidden="true"></svg> }
+                  @case ('text') { <svg lucideType [size]="16" aria-hidden="true"></svg> }
+                  @case ('date') { <svg lucideCalendar [size]="16" aria-hidden="true"></svg> }
+                  @case ('checkbox') { <svg lucideSquareCheck [size]="16" aria-hidden="true"></svg> }
+                  @case ('radio') { <svg lucideCircleDot [size]="16" aria-hidden="true"></svg> }
+                  @case ('dropdown') { <svg lucideChevronDown [size]="16" aria-hidden="true"></svg> }
+                  @case ('image') { <svg lucideImage [size]="16" aria-hidden="true"></svg> }
+                  @case ('label') { <svg lucideTag [size]="16" aria-hidden="true"></svg> }
+                  @default { <svg lucideLink2 [size]="16" aria-hidden="true"></svg> }
+                }
+                <span>{{ def.label }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </ng-template>
+
+  <ng-template #inspectorTpl>
+    <div class="prepare-inspector">
+      <h2 class="panel-eyebrow">Readiness</h2>
+      <ul class="checklist">
+        @for (i of check().items; track i.label) {
+          <li [class.is-done]="i.done"><span class="field-dot" aria-hidden="true">@if (i.done) { <svg lucideCheck [size]="11"></svg> }</span>{{ i.label }}<span class="sr-only">{{ i.done ? ', done' : ', to do' }}</span></li>
+        }
+      </ul>
+
+      @if (selected(); as sel) {
+        @for (s of [sel.id]; track s) {
+          <section class="inspector-section" [attr.aria-label]="fieldLabel(sel) + ' field'">
+            <div class="inspector-title">{{ fieldLabel(sel) }}</div>
+            <div class="workspace-meta">{{ sel.type }}</div>
+            <ejs-textbox placeholder="Field name" floatLabelType="Always" [value]="sel.name" (change)="rename($any($event).value ?? '')" [htmlAttributes]="{ 'aria-label': 'Field name' }"></ejs-textbox>
+            <ejs-checkbox label="Required field" [checked]="!!sel.isRequired" (change)="setRequired(!!$any($event).checked)"></ejs-checkbox>
+
+            @if (kindOf(sel.id) === 'text') {
+              <ejs-textbox id="prepare-field-value" placeholder="Value" floatLabelType="Always" [value]="entryOf(sel.id)?.value ?? ''" (input)="setValue(sel.id, $any($event).value ?? '')" [htmlAttributes]="{ 'aria-label': 'Value' }"></ejs-textbox>
+            }
+            @if (kindOf(sel.id) === 'date') {
+              <ejs-datepicker cssClass="prepare-datepicker" placeholder="Date" floatLabelType="Always" [format]="dateFormat" [htmlAttributes]="{ 'aria-label': 'Date' }"
+                [value]="dateValue(sel.id)!" [showClearButton]="true" (change)="setDate(sel.id, $any($event)?.value ? $any($event).value : null)"></ejs-datepicker>
+              <ejs-dropdownlist placeholder="Printed date format" floatLabelType="Always" [value]="dateOf(sel.id).format" [htmlAttributes]="{ 'aria-label': 'Printed date format' }"
+                [dataSource]="dateFormats(sel.id)" [fields]="{ text: 'text', value: 'value' }" (change)="setDate(sel.id, dateValue(sel.id), $any($event).value)"></ejs-dropdownlist>
+            }
+            @if (kindOf(sel.id) === 'text' || kindOf(sel.id) === 'date') {
+              <div class="format-block" role="group" aria-label="Text formatting">
+                <div class="format-row">
+                  <ejs-dropdownlist placeholder="Font" floatLabelType="Always" [value]="formatOf(sel.id).fontFamily" [htmlAttributes]="{ 'aria-label': 'Font' }" [dataSource]="textFonts"
+                    (change)="applyFormat(sel.id, { fontFamily: $any($event).value })"></ejs-dropdownlist>
+                  <ejs-numerictextbox placeholder="Size" floatLabelType="Always" [value]="formatOf(sel.id).fontSize" [htmlAttributes]="{ 'aria-label': 'Font size' }" [min]="6" [max]="48" [step]="1" format="n0" cssClass="format-size"
+                    (change)="$any($event).isInteracted !== false && $any($event).value != null && applyFormat(sel.id, { fontSize: $any($event).value })"></ejs-numerictextbox>
+                </div>
+                <div class="format-row">
+                  <div class="seg" role="group" aria-label="Font style">
+                    @for (st of fontStyles; track st.label) {
+                      <button ejs-button [cssClass]="'e-flat seg-btn' + (styleOn(sel.id, st.flag) ? ' is-on' : '')" [attr.aria-pressed]="styleOn(sel.id, st.flag)" [attr.aria-label]="st.label" [title]="st.label" (click)="toggleStyle(sel.id, st.flag)">
+                        @switch (st.icon) {
+                          @case ('bold') { <svg lucideBold [size]="14" aria-hidden="true"></svg> }
+                          @case ('italic') { <svg lucideItalic [size]="14" aria-hidden="true"></svg> }
+                          @default { <svg lucideUnderline [size]="14" aria-hidden="true"></svg> }
+                        }
+                      </button>
+                    }
+                  </div>
+                  <div class="seg" role="group" aria-label="Alignment">
+                    @for (al of aligns; track al.value) {
+                      <button ejs-button [cssClass]="'e-flat seg-btn' + (formatOf(sel.id).alignment === al.value ? ' is-on' : '')" [attr.aria-pressed]="formatOf(sel.id).alignment === al.value" [attr.aria-label]="al.label" [title]="al.label" (click)="applyFormat(sel.id, { alignment: al.value })">
+                        @switch (al.value) {
+                          @case ('Left') { <svg lucideTextAlignStart [size]="14" aria-hidden="true"></svg> }
+                          @case ('Center') { <svg lucideTextAlignCenter [size]="14" aria-hidden="true"></svg> }
+                          @default { <svg lucideTextAlignEnd [size]="14" aria-hidden="true"></svg> }
+                        }
+                      </button>
+                    }
+                  </div>
+                  <span role="group" aria-label="Text colour">
+                    <input ejs-colorpicker type="color" [value]="formatOf(sel.id).color" mode="Palette" [modeSwitcher]="false" [showButtons]="false" cssClass="format-color"
+                      (change)="applyFormat(sel.id, { color: ($any($event).currentValue?.hex ?? $any($event).value).slice(0, 7) })" />
+                  </span>
+                </div>
+              </div>
+            }
+            @if (liveBounds(sel.id); as b) {
+              <div class="format-row" role="group" aria-label="Position">
+                <ejs-numerictextbox placeholder="X" floatLabelType="Always" [value]="round(b.X)" [htmlAttributes]="{ 'aria-label': 'Position X' }" [min]="0" [step]="5" format="n0"
+                  (change)="$any($event).isInteracted && moveField(sel.id, 'X', $any($event).value)"></ejs-numerictextbox>
+                <ejs-numerictextbox placeholder="Y" floatLabelType="Always" [value]="round(b.Y)" [htmlAttributes]="{ 'aria-label': 'Position Y' }" [min]="0" [step]="5" format="n0"
+                  (change)="$any($event).isInteracted && moveField(sel.id, 'Y', $any($event).value)"></ejs-numerictextbox>
+              </div>
+            }
+            @if (kindOf(sel.id) === 'image' || kindOf(sel.id) === 'checkbox') {
+              <button ejs-button cssClass="e-outline" (click)="openFieldEditor(sel.id)">{{ kindOf(sel.id) === 'image' ? 'Add image…' : 'Toggle checked' }}</button>
+            }
+            <div class="panel-eyebrow" id="assign-label">Assign to</div>
+            <div class="chip-row" role="group" aria-labelledby="assign-label">
+              @for (r of recipients(); track r.id) {
+                <button type="button" [class]="'recip-chip' + (sel.customData?.recipientId === r.id ? ' is-active' : '')" [attr.aria-pressed]="sel.customData?.recipientId === r.id"
+                  [style.--rc]="rc(r)" (click)="assign(r)"><span class="avatar" aria-hidden="true">{{ r.initials }}</span>{{ r.name }}</button>
+              }
+            </div>
+            <button ejs-button cssClass="e-outline e-danger app-btn" (click)="deleteSelected()"><svg lucideTrash [size]="14" aria-hidden="true"></svg> Delete field</button>
+          </section>
+        }
+      } @else {
+        <div class="inspector-empty">
+          <svg lucideMousePointerClick [size]="20" aria-hidden="true"></svg>
+          <p>Place a field from the palette, then select it to assign a recipient and edit it.</p>
+        </div>
+      }
+
+      <h2 class="panel-eyebrow">Signing ledger</h2>
+      <div class="ledger">
+        @for (g of ledger(); track g.r.id) {
+          <div class="ledger-group">
+            <div class="ledger-head" [style.--rc]="rc(g.r)"><span class="avatar" aria-hidden="true">{{ g.r.initials }}</span><span>{{ g.r.name }}</span><span class="count">{{ g.list.length }}</span></div>
+            @if (g.list.length) { <div class="chip-row">@for (f of g.list; track f.id) { <button type="button" class="field-chip" (click)="focusField(f.id)">{{ fieldLabel(f) }}</button> }</div> }
+          </div>
+        }
+        @if (unassigned().length) {
+          <div class="ledger-group">
+            <div class="ledger-head"><span>Unassigned</span><span class="count">{{ unassigned().length }}</span></div>
+            <div class="chip-row">@for (f of unassigned(); track f.id) { <button type="button" class="field-chip" (click)="focusField(f.id)">{{ fieldLabel(f) }}</button> }</div>
+          </div>
+        }
+      </div>
+    </div>
+  </ng-template>
+} @else {
+  <app-document-not-found />
+}

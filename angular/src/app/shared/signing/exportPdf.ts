@@ -1,0 +1,83 @@
+import { PdfBitmap, PdfDocument, type PdfPage } from '@syncfusion/ej2-pdf'
+import { assetUrl } from '../assets'
+
+// The reference app's watermark image, bottom-right on every signed page at 16% opacity (Sarwan's choice
+// of 2026-10-22, decision record watermark-reference-image, replacing plan decision D1's vector mark).
+const WATERMARK_PATH = '/branding/watermark.jpg'
+const WATERMARK_WIDTH_PT = 112
+const WATERMARK_OPACITY = 0.16
+const WATERMARK_MARGIN_PT = 24
+/** Accent for the signing-certificate page (tokens.css --sf-color-blue-600). */
+export const BRAND_RGB = { r: 23, g: 92, b: 211 }
+
+let watermarkBytesCache: Promise<Uint8Array> | null = null
+
+/** Stamps the watermark bottom-right on one page (also used for the signing-certificate page). */
+export function drawWatermark(page: PdfPage, watermark: PdfBitmap) {
+  const height = watermark.height * (WATERMARK_WIDTH_PT / watermark.width)
+  const graphics = page.graphics
+  graphics.save()
+  graphics.setTransparency(WATERMARK_OPACITY)
+  graphics.drawImage(watermark, {
+    x: page.size.width - WATERMARK_WIDTH_PT - WATERMARK_MARGIN_PT,
+    y: page.size.height - height - WATERMARK_MARGIN_PT,
+    width: WATERMARK_WIDTH_PT,
+    height,
+  })
+  graphics.restore()
+}
+
+export function fetchWatermarkBytes(): Promise<Uint8Array> {
+  if (!watermarkBytesCache) {
+    watermarkBytesCache = fetch(assetUrl(WATERMARK_PATH))
+      .then((res) => { if (!res.ok) throw new Error(`Watermark not found (${res.status})`); return res.arrayBuffer() })
+      .then((buf) => new Uint8Array(buf))
+    watermarkBytesCache.catch(() => { watermarkBytesCache = null })
+  }
+  return watermarkBytesCache
+}
+
+/**
+ * Post-processes a just-signed PDF blob (from PdfViewerComponent.saveAsBlob()) with the JS PDF
+ * library: stamps the watermark on every page and flattens the form fields. Falls back
+ * to the original blob if anything here fails, so a watermarking bug can never block signing.
+ *
+ * Field border/background stripping is NOT done here — see SignDocument.tsx's handleSubmit,
+ * which clears them on the *live* viewer via formDesigner.updateFormField() before saveAsBlob().
+ * Doing it here (post-hoc, via @syncfusion/ej2-pdf's PdfField.borderColor/backColor setters on
+ * fields loaded from already-saved bytes) does not reliably work: a field whose appearance was
+ * already baked in by saveAsBlob() carries a cached appearance stream, and re-setting these
+ * properties afterward doesn't reliably regenerate it — confirmed live (signature field's border
+ * cleared, but the textbox field's cached blue background/border did not, across several retries
+ * including re-touching `.text` to force a refresh). The ej2-pdf source itself
+ * (form/field.js `_updateBackColor`) also has a suspicious-looking transparency condition
+ * (`hasTransparency && _isNullOrUndefined(value) && value.isTransparent`, which can never be true
+ * as written) worth re-checking against a future package version before trying this path again.
+ */
+export async function finalizeSignedPdf(signedBlob: Blob): Promise<Blob> {
+  try {
+    const [signedBytes, watermarkBytes] = await Promise.all([
+      signedBlob.arrayBuffer().then((buf) => new Uint8Array(buf)),
+      fetchWatermarkBytes(),
+    ])
+
+    const doc = new PdfDocument(signedBytes)
+    const watermark = new PdfBitmap(watermarkBytes)
+    for (let i = 0; i < doc.pageCount; i++) drawWatermark(doc.getPage(i), watermark)
+
+    // Flatten form fields + annotations into static page content (document-settings.md
+    // "Flattening Content"). Done here, in the same save as the watermark, because every edit
+    // must be finished before the PKI signature is applied (src/signing/secureSign.ts).
+    doc.flatten = true
+    const finalBytes = doc.save()
+    doc.destroy()
+    // Copy into a plain ArrayBuffer — doc.save()'s Uint8Array is typed over ArrayBufferLike
+    // (which includes SharedArrayBuffer), not assignable to BlobPart directly.
+    const buffer = new ArrayBuffer(finalBytes.byteLength)
+    new Uint8Array(buffer).set(finalBytes)
+    return new Blob([buffer], { type: 'application/pdf' })
+  } catch (err) {
+    console.error('finalizeSignedPdf: watermark/border post-processing failed, using unmodified signed PDF', err)
+    return signedBlob
+  }
+}

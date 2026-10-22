@@ -1,0 +1,76 @@
+/* App component tokens (design/DESIGN.md). Semantic roles only; raw values stay in tokens.css. */
+:root {
+  --app-content-max: 1200px;
+  --app-topbar-height: 56px;
+  --app-topbar-surface: var(--color-sf-bg-surface);
+  --app-topbar-border: var(--color-sf-border-primary);
+  --app-nav-active: var(--color-sf-fg-brand-primary);
+  --app-card-hover-bg: var(--color-sf-bg-surface-hover);
+  --app-card-hover-border: var(--color-sf-border-brand);
+  --app-kpi-icon-bg: var(--color-sf-bg-info-primary);
+  --app-kpi-icon-fg: var(--color-sf-fg-info-primary);
+  --app-badge-success-bg: var(--color-sf-bg-success-primary);
+  --app-badge-success-fg: var(--color-sf-fg-success-primary);
+  --app-badge-warning-bg: var(--color-sf-bg-warning-primary);
+  --app-badge-warning-fg: var(--color-sf-fg-warning-primary);
+  --app-badge-danger-bg: var(--color-sf-bg-danger-primary);
+  --app-badge-danger-fg: var(--color-sf-fg-danger-primary);
+  --app-badge-info-bg: var(--color-sf-bg-info-primary);
+  --app-badge-info-fg: var(--color-sf-fg-info-primary);
+  --app-badge-neutral-bg: var(--color-sf-bg-neutral-primary);
+  --app-badge-neutral-fg: var(--color-sf-fg-neutral-primary);
+  --app-panel-width: 300px;
+  --app-palette-width: 260px;
+  --app-inspector-width: 300px;
+  --app-viewer-canvas: var(--color-sf-bg-surface-muted);
+  --app-recipient-1: var(--color-sf-chart-series-1);
+  --app-recipient-2: var(--color-sf-chart-series-2);
+  --app-recipient-3: var(--color-sf-chart-series-3);
+  --app-recipient-4: var(--color-sf-chart-series-4);
+  --app-recipient-5: var(--color-sf-chart-series-5);
+  --app-recipient-6: var(--color-sf-chart-series-6);
+  --app-recipient-7: var(--color-sf-chart-series-7);
+  --app-recipient-8: var(--color-sf-chart-series-8);
+  --app-dropzone-border: var(--color-sf-border-strong);
+  --app-dropzone-active-bg: var(--color-sf-bg-brand-subtle);
+  --app-on-brand: var(--sf-color-white);
+  --app-brand-fill: var(--sf-color-blue-600);
+  --app-brand-fill-hover: color-mix(in srgb, var(--sf-color-blue-600) 85%, var(--sf-color-slate-900));
+  --app-brand-fill-pressed: color-mix(in srgb, var(--sf-color-blue-600) 75%, var(--sf-color-slate-900));
+  --app-brand-fill-disabled: color-mix(in srgb, var(--sf-color-slate-500) 40%, transparent);
+}
+:root[data-theme="dark"] { --app-on-brand: var(--sf-color-slate-50); }
+
+/* The Tailwind 3 theme's primary is indigo; this app's brand is blue. Map the theme's primary variables to
+   the brand in both themes with selectors that outrank the theme's :root (design-system.md). Values mirror
+   tokens.css blue (light) and the dark brand. */
+:root {
+  --color-sf-primary: rgba(23, 92, 211);
+  --color-sf-primary-light: rgba(59, 130, 246);
+  --color-sf-primary-lighter: rgba(214, 228, 255);
+  --color-sf-primary-dark: rgba(35, 78, 165);
+  --color-sf-primary-darker: rgba(23, 37, 84);
+  --color-sf-primary-text-color: var(--app-on-brand);
+  --color-sf-primary-text: var(--app-on-brand);
+  --color-sf-primary-text-hover: var(--app-on-brand);
+  --color-sf-primary-text-focus: var(--app-on-brand);
+  --color-sf-primary-text-pressed: var(--app-on-brand);
+  --color-sf-primary-bg-color: var(--app-brand-fill);
+  --color-sf-primary-border-color: var(--app-brand-fill);
+  --color-sf-primary-bg-color-hover: var(--app-brand-fill-hover);
+  --color-sf-primary-border-color-hover: var(--app-brand-fill-hover);
+  --color-sf-primary-bg-color-focus: var(--app-brand-fill-hover);
+  --color-sf-primary-border-color-focus: var(--app-brand-fill-hover);
+  --color-sf-primary-bg-color-pressed: var(--app-brand-fill-pressed);
+  --color-sf-primary-border-color-pressed: var(--app-brand-fill-pressed);
+  --color-sf-primary-bg-color-disabled: var(--app-brand-fill-disabled);
+  --color-sf-primary-border-color-disabled: var(--app-brand-fill-disabled);
+  --color-sf-primary-outline: var(--color-sf-fg-brand-primary);
+}
+:root.e-dark-mode {
+  --color-sf-primary: rgba(96, 165, 250);
+  --color-sf-primary-light: rgba(147, 197, 253);
+  --color-sf-primary-lighter: rgba(59, 130, 246);
+  --color-sf-primary-dark: rgba(147, 197, 253);
+  --color-sf-primary-darker: rgba(219, 234, 254);
+}

@@ -1,0 +1,13 @@
+# The port's own ignore list (source-only Angular port); the repository's root .gitignore is unchanged.
+/dist
+/out-tsc
+/tmp
+/node_modules
+/.angular
+npm-debug.log
+.env
+.idea/
+.vscode/
+# Copied from node_modules on install/build (scripts/), not source.
+/public/ej2-pdfviewer-lib
+/public/styles/syncfusion

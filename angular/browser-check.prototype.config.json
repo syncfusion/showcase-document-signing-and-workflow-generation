@@ -1,0 +1,89 @@
+{
+  "baseUrl": "http://127.0.0.1:5180/",
+  "routes": [
+    {
+      "name": "dashboard",
+      "path": "./",
+      "settleMs": 2500
+    },
+    {
+      "name": "documents",
+      "path": "./documents",
+      "settleMs": 2500
+    },
+    {
+      "name": "sign",
+      "path": "./sign/sample-mutual-nda",
+      "settleMs": 8000
+    },
+    {
+      "name": "templates",
+      "path": "./templates",
+      "settleMs": 2500
+    },
+    {
+      "name": "prepare",
+      "path": "./prepare/sample-vendor-services-agreement",
+      "settleMs": 8000
+    },
+    {
+      "name": "cta-view-documents",
+      "path": "./",
+      "click": [
+        "View documents"
+      ],
+      "expectHeading": "Documents",
+      "themeSwitch": false,
+      "settleMs": 2500
+    },
+    {
+      "name": "cta-activity-row-ready-to-sign",
+      "path": "./",
+      "click": [
+        "Mutual Non-Disclosure Agreement"
+      ],
+      "expectHeading": "Mutual Non-Disclosure Agreement",
+      "themeSwitch": false,
+      "settleMs": 8000
+    },
+    {
+      "name": "cta-sign-now",
+      "path": "./documents",
+      "click": [
+        "Sign now: Mutual Non-Disclosure Agreement"
+      ],
+      "expectHeading": "Mutual Non-Disclosure Agreement",
+      "themeSwitch": false,
+      "settleMs": 8000
+    },
+    {
+      "name": "cta-back-to-dashboard",
+      "path": "./sign/sample-mutual-nda",
+      "click": [
+        "Back to dashboard"
+      ],
+      "expectHeading": "Prepare, place fields, and send for signature",
+      "themeSwitch": false,
+      "settleMs": 8000
+    }
+  ],
+  "themes": {
+    "light": {
+      "localStorage": {
+        "signflow.v2.theme": "light"
+      }
+    },
+    "dark": {
+      "localStorage": {
+        "signflow.v2.theme": "dark"
+      }
+    }
+  },
+  "themeSwitch": {
+    "button": "Switch to (light|dark) theme",
+    "settleMs": 2000
+  },
+  "screenshotDir": "../../openspec/changes/angular-port/validation/screenshots/angular-prototype",
+  "allowTrialBanner": false,
+  "colourRules": []
+}

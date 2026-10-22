@@ -1,0 +1,18 @@
+{
+  "logDir": "../../openspec/changes/angular-port/validation/logs",
+  "appDir": "../..",
+  "concurrency": 3,
+  "build": "npx ng build",
+  "serve": {
+    "command": "node scripts/serve-dist.mjs",
+    "env": { "PORT": "5180" },
+    "health": "http://127.0.0.1:5180/"
+  },
+  "steps": [
+    { "name": "check-app", "title": "check-app source checks", "serial": true, "command": "cd ../../../.. && node factory/tools/factory.mjs check-app --app doc-signing-and-workflow", "log": "{phase}-check-app.log" },
+    { "name": "tsc", "title": "TypeScript", "serial": true, "command": "npx tsc -p tsconfig.app.json --noEmit", "log": "{phase}-tsc.log", "reusable": true },
+    { "name": "tests", "title": "Unit tests (shared modules)", "serial": true, "command": "npm test", "log": "{phase}-tests.log", "reusable": true },
+    { "name": "browser", "title": "Browser check, every route x 2 themes x 4 sizes", "needsServer": true, "reusable": true, "phases": ["build", "validate"], "command": "node browser-check.mjs --config browser-check.{phase}.config.json --concurrency 2", "log": "{phase}-browser-check.json" },
+    { "name": "browser-prototype", "title": "Browser check, prototype routes, desktop and phone", "needsServer": true, "phases": ["prototype"], "command": "node browser-check.mjs --config browser-check.prototype.config.json --viewports wide,phone", "log": "{phase}-browser-check.json" }
+  ]
+}

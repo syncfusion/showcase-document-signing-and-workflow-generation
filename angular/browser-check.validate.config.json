@@ -1,0 +1,32 @@
+{
+  "baseUrl": "http://127.0.0.1:5180/",
+  "routes": [
+    { "name": "dashboard", "path": "./", "settleMs": 2500 },
+    { "name": "documents", "path": "./documents", "settleMs": 2500 },
+    { "name": "templates", "path": "./templates", "settleMs": 2500 },
+    { "name": "new", "path": "./new", "settleMs": 2500 },
+    { "name": "new-template", "path": "./new?mode=template", "settleMs": 2500 },
+    { "name": "prepare", "path": "./prepare/sample-vendor-services-agreement", "settleMs": 8000 },
+    { "name": "sign", "path": "./sign/sample-mutual-nda", "settleMs": 8000 },
+    { "name": "completed", "path": "./completed/offer-letter", "settleMs": 9000 },
+    { "name": "cta-create-new-document", "path": "./", "click": ["Create new document"], "expectHeading": "New document", "themeSwitch": false, "settleMs": 2500 },
+    { "name": "cta-browse-templates", "path": "./", "click": ["Browse templates"], "expectHeading": "Templates", "themeSwitch": false, "settleMs": 2500 },
+    { "name": "cta-view-documents", "path": "./", "click": ["View documents"], "expectHeading": "Documents", "themeSwitch": false, "settleMs": 2500 },
+    { "name": "cta-activity-ready-to-sign", "path": "./", "click": ["Mutual Non-Disclosure Agreement"], "expectHeading": "Mutual Non-Disclosure Agreement", "themeSwitch": false, "settleMs": 8000 },
+    { "name": "cta-activity-draft", "path": "./", "click": ["Master Services Agreement"], "expectHeading": "Master Services Agreement", "themeSwitch": false, "settleMs": 8000 },
+    { "name": "cta-activity-completed", "path": "./", "click": ["Employment Offer Letter"], "expectHeading": "Employment Offer Letter", "themeSwitch": false, "settleMs": 9000 },
+    { "name": "cta-sign-now", "path": "./documents", "click": ["Sign now: Mutual Non-Disclosure Agreement"], "expectHeading": "Mutual Non-Disclosure Agreement", "themeSwitch": false, "settleMs": 8000 },
+    { "name": "cta-view-signed-copy", "path": "./documents", "click": ["View signed copy: Employment Offer Letter"], "expectHeading": "Employment Offer Letter", "themeSwitch": false, "settleMs": 9000 },
+    { "name": "cta-create-template", "path": "./templates", "click": ["Create template"], "expectHeading": "New template", "themeSwitch": false, "settleMs": 2500 },
+    { "name": "cta-use-template-sales-quote", "path": "./templates", "click": ["Use template: Sales Quote"], "expectHeading": "Sales Quote", "themeSwitch": false, "settleMs": 8000 },
+    { "name": "cta-back-to-dashboard", "path": "./new", "click": ["Back to dashboard"], "expectHeading": "Prepare, place fields, and send for signature", "themeSwitch": false, "settleMs": 2500 }
+  ],
+  "themes": {
+    "light": { "localStorage": { "signflow.v2.theme": "light" } },
+    "dark": { "localStorage": { "signflow.v2.theme": "dark" } }
+  },
+  "themeSwitch": { "button": "Switch to (light|dark) theme", "settleMs": 2000 },
+  "screenshotDir": "../../openspec/changes/angular-port/validation/screenshots/angular-validate",
+  "allowTrialBanner": false,
+  "colourRules": []
+}

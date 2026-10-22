@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "documents": [
+    { "id": "mutual-nda", "name": "Mutual Non-Disclosure Agreement", "path": "/documents/mutual-nda.pdf", "pages": 1, "sizeBytes": 3520, "status": "Ready to sign" },
+    { "id": "offer-letter", "name": "Employment Offer Letter", "path": "/documents/offer-letter.pdf", "pages": 1, "sizeBytes": 3222, "status": "Completed" },
+    { "id": "rental-agreement", "name": "Residential Lease Agreement", "path": "/documents/rental-agreement.pdf", "pages": 1, "sizeBytes": 3500, "status": "Draft" },
+    { "id": "sales-quote", "name": "Sales Quote", "path": "/documents/sales-quote.pdf", "pages": 1, "sizeBytes": 3063, "status": "Ready to sign" },
+    { "id": "consent-form", "name": "Consent & Release Form", "path": "/documents/consent-form.pdf", "pages": 1, "sizeBytes": 3029, "status": "Draft" },
+    { "id": "vendor-services-agreement", "name": "Master Services Agreement", "path": "/documents/vendor-services-agreement.pdf", "pages": 2, "sizeBytes": 4617, "status": "Draft" }
+  ],
+  "templates": [
+    { "id": "mutual-nda", "documentId": "mutual-nda", "name": "Mutual Non-Disclosure Agreement", "category": "NDA", "description": "Two-way confidentiality agreement for early-stage business discussions.", "suggestedFields": "Two-party signatures" },
+    { "id": "offer-letter", "documentId": "offer-letter", "name": "Employment Offer Letter", "category": "Offer letter", "description": "Role, compensation, and equity offer with acceptance signature block.", "suggestedFields": "Signature + printed name" },
+    { "id": "rental-agreement", "documentId": "rental-agreement", "name": "Residential Lease Agreement", "category": "Rental agreement", "description": "Landlord and tenant lease with a rent schedule and dual signature blocks.", "suggestedFields": "Landlord + tenant signatures" },
+    { "id": "sales-quote", "documentId": "sales-quote", "name": "Sales Quote", "category": "Sales contract", "description": "Itemized quote with pricing summary and customer acceptance signature.", "suggestedFields": "Customer + vendor signatures" },
+    { "id": "consent-form", "documentId": "consent-form", "name": "Consent & Release Form", "category": "Consent form", "description": "Participation and media release consent with checkbox acknowledgements.", "suggestedFields": "Checkboxes + participant signature" },
+    { "id": "vendor-services-agreement", "documentId": "vendor-services-agreement", "name": "Master Services Agreement", "category": "Sales contract", "description": "Vendor MSA with statement of work, fees, and company + vendor signature blocks.", "suggestedFields": "Company + vendor signatures" }
+  ],
+  "recipients": [
+    { "id": "alex-norman", "name": "Alex Norman", "role": "Signer · You", "initials": "AN", "email": "alex@northstar.example", "colorSlot": 1 },
+    { "id": "maya-kapoor", "name": "Maya Kapoor", "role": "Signer · Client", "initials": "MK", "email": "maya@client.example", "colorSlot": 3 }
+  ],
+  "samples": [
+    {
+      "id": "sample-vendor-services-agreement", "documentId": "vendor-services-agreement", "status": "Draft",
+      "recipientIds": ["alex-norman", "maya-kapoor"], "preparedAt": "2026-10-06T09:30:00.000Z",
+      "fields": [
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 1", "isRequired": true, "recipientId": "alex-norman", "pageIndex": 1, "bounds": { "X": 72, "Y": 191, "Width": 200, "Height": 40 } },
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 2", "isRequired": true, "pageIndex": 1, "bounds": { "X": 408, "Y": 191, "Width": 200, "Height": 40 } }
+      ]
+    },
+    {
+      "id": "sample-rental-agreement", "documentId": "rental-agreement", "status": "Draft",
+      "recipientIds": ["alex-norman", "maya-kapoor"], "preparedAt": "2026-10-06T09:30:00.000Z",
+      "fields": [
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 1", "isRequired": true, "recipientId": "alex-norman", "pageIndex": 0, "bounds": { "X": 72, "Y": 877, "Width": 200, "Height": 40 } },
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 2", "isRequired": true, "pageIndex": 0, "bounds": { "X": 408, "Y": 877, "Width": 200, "Height": 40 } }
+      ]
+    },
+    {
+      "id": "sample-consent-form", "documentId": "consent-form", "status": "Draft",
+      "recipientIds": ["maya-kapoor", "alex-norman"], "preparedAt": "2026-10-06T09:30:00.000Z",
+      "fields": [
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 1", "isRequired": true, "recipientId": "maya-kapoor", "pageIndex": 0, "bounds": { "X": 72, "Y": 694, "Width": 200, "Height": 40 } },
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 2", "isRequired": true, "pageIndex": 0, "bounds": { "X": 408, "Y": 694, "Width": 200, "Height": 40 } }
+      ]
+    },
+    {
+      "id": "sample-mutual-nda", "documentId": "mutual-nda", "status": "Ready to sign",
+      "recipientIds": ["alex-norman", "maya-kapoor"], "preparedAt": "2026-10-06T09:30:00.000Z",
+      "fields": [
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 1", "isRequired": true, "recipientId": "alex-norman", "pageIndex": 0, "bounds": { "X": 72, "Y": 888, "Width": 200, "Height": 40 } },
+        { "base": "Textbox", "semantic": "date", "name": "Editable date 1", "isRequired": true, "recipientId": "alex-norman", "pageIndex": 0, "bounds": { "X": 282, "Y": 904, "Width": 100, "Height": 24 } }
+      ]
+    },
+    {
+      "id": "sample-sales-quote", "documentId": "sales-quote", "status": "Ready to sign",
+      "recipientIds": ["alex-norman", "maya-kapoor"], "preparedAt": "2026-10-06T09:30:00.000Z",
+      "fields": [
+        { "base": "SignatureField", "semantic": "signature", "name": "Signature 1", "isRequired": true, "recipientId": "alex-norman", "pageIndex": 0, "bounds": { "X": 408, "Y": 646, "Width": 200, "Height": 40 } },
+        { "base": "Textbox", "semantic": "date", "name": "Editable date 1", "isRequired": true, "recipientId": "alex-norman", "pageIndex": 0, "bounds": { "X": 614, "Y": 662, "Width": 100, "Height": 24 } }
+      ]
+    }
+  ],
+  "completedSamples": [
+    { "documentId": "offer-letter", "pdfPath": "/documents/signed/offer-letter-signed.pdf", "auditPath": "/documents/signed/offer-letter-signed.audit.json" }
+  ]
+}
